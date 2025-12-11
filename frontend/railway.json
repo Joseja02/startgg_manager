@@ -2,11 +2,13 @@
   "$schema": "https://railway.com/railway.schema.json",
   "variables": {
     "NPM_CONFIG_PRODUCTION": "false",
-    "NODE_ENV": "development"
+    "NPM_CONFIG_OPTIONAL": "true",
+    "NODE_ENV": "development",
+    "NIXPACKS_NODE_VERSION": "22"
   },
   "build": {
     "builder": "NIXPACKS",
-    "installCommand": "npm ci",
+    "installCommand": "rm -rf node_modules && npm ci --include=dev --ignore-scripts=false",
     "buildCommand": "npm run build",
     "watchPatterns": [
       "package.json",
