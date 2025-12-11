@@ -128,7 +128,7 @@ class StartggController extends Controller
         $apiToken = $user->createToken('web-app')->plainTextToken;
 
         // Redirigir al frontend con el token
-        $frontendUrl = env('FRONTEND_URL', 'http://localhost:8080');
+        $frontendUrl = env('FRONTEND_URL', 'https://startgg-manager-frontend-production.up.railway.app:8080');
         
         return redirect()->away(rtrim($frontendUrl, '/') . '/auth/callback?token=' . $apiToken);
     }
