@@ -1,5 +1,9 @@
 {
   "$schema": "https://railway.com/railway.schema.json",
+  "variables": {
+    "NPM_CONFIG_PRODUCTION": "false",
+    "NODE_ENV": "development"
+  },
   "build": {
     "builder": "NIXPACKS",
     "installCommand": "npm ci",
