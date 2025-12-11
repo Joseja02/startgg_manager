@@ -1,0 +1,22 @@
+# Root ignores to keep secrets and artifacts out of git
+.env
+.env.*
+*.env
+backend/.env
+backend/.env.*
+frontend/.env
+frontend/.env.*
+token_personal_startgg.txt
+set-stage/
+
+# Dependencies and builds
+node_modules/
+vendor/
+frontend/dist/
+backend/public/build/
+
+# IDE/editor
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
