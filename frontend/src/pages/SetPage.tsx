@@ -135,6 +135,8 @@ export default function SetPage() {
   const handleStartSet = async () => {
     try {
       await startSet();
+      // Refrescar datos del set sin recargar la página
+      await refetch();
     } catch (err: any) {
       if (err?.response?.status === 403) {
         setScopeErrorMessage(err?.response?.data?.message || '');
@@ -285,6 +287,34 @@ export default function SetPage() {
             isStarting={isStarting}
           />
         )}
+
+        {/* Refresh Controls */}
+        <div className="flex gap-3">
+          <Button variant="outline" onClick={() => refetch()}>
+            Refrescar set
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => navigate('/dashboard')}
+            title="Ir al dashboard"
+          >
+            Dashboard
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => navigate(`/events/${setDetail.eventId}/sets`)}
+            title="Ir a sets del evento"
+          >
+            Sets del evento
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => navigate('/admin/reports')}
+            title="Ir a reportes"
+          >
+            Reportes
+          </Button>
+        </div>
 
         {/* Score Board */}
         <ScoreBoard

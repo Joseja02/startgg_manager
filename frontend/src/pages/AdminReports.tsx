@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -13,6 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 export default function AdminReports() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [filter, setFilter] = useState<'pending' | 'approved' | 'rejected'>('pending');
 
   const { data: reports, isLoading } = useQuery({
@@ -35,6 +36,14 @@ export default function AdminReports() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Reportes de Sets</h1>
           <p className="text-muted-foreground">Revisa y aprueba reportes de competidores</p>
+          <div className="mt-4">
+            <Button
+              variant="outline"
+              onClick={() => queryClient.invalidateQueries({ queryKey: ['adminReports'] })}
+            >
+              Refrescar reportes
+            </Button>
+          </div>
         </div>
 
         <Tabs value={filter} onValueChange={(v) => setFilter(v as typeof filter)}>

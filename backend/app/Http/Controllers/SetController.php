@@ -95,6 +95,21 @@ class SetController extends Controller
             // Marcar el set como en progreso en start.gg
             $result = $this->client->markSetInProgress($user, $setId);
 
+            // Invalidar caches relacionados para reflejar el nuevo estado
+            $eventId = $setDetail['eventId'] ?? null;
+            if ($eventId) {
+                $cacheKeys = [
+                    "event_{$eventId}_sets_user_{$user->id}",
+                    "event_{$eventId}_sets_user_{$user->id}_status_in_progress",
+                    "event_{$eventId}_sets_all",
+                    "event_{$eventId}_sets_all_status_in_progress",
+                    "set_detail_{$setId}",
+                ];
+                foreach ($cacheKeys as $key) {
+                    Cache::forget($key);
+                }
+            }
+
             return response()->json([
                 'message' => 'Set marked as in progress',
                 'set' => $result,
@@ -181,6 +196,26 @@ class SetController extends Controller
 
             // Obtener información del set desde start.gg
             $setDetail = $this->client->getSetDetail($user, $setId);
+            
+            // Validar que el usuario es uno de los participantes del set
+            $userStartggId = $user->startgg_user_id;
+            $p1StartggId = $setDetail['p1']['participantId'] ?? null;
+            $p2StartggId = $setDetail['p2']['participantId'] ?? null;
+            
+            if ($userStartggId !== $p1StartggId && $userStartggId !== $p2StartggId) {
+                Log::warning('User attempted to submit report for set they do not participate in', [
+                    'user_id' => $user->id,
+                    'user_startgg_id' => $userStartggId,
+                    'set_id' => $setId,
+                    'p1_startgg_id' => $p1StartggId,
+                    'p2_startgg_id' => $p2StartggId,
+                ]);
+                
+                return response()->json([
+                    'error' => 'Unauthorized',
+                    'message' => 'You can only submit reports for sets you participate in',
+                ], 403);
+            }
             
             // Validar games según reglas SBS
             $games = $request->input('games');
