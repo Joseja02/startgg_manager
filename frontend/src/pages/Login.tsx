@@ -45,8 +45,8 @@ export default function Login() {
   };
 
   const handleAdminLogin = () => {
-    localStorage.setItem('auth_token', 'mock_admin_token_' + Date.now());
-    localStorage.setItem('mock_admin', 'true');
+    sessionStorage.setItem('auth_token', 'mock_admin_token_' + Date.now());
+    sessionStorage.setItem('mock_admin', 'true');
     setIsAuthenticating(true);
     toast({
       title: 'Iniciando sesión como Admin...',

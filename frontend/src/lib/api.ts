@@ -11,9 +11,9 @@ const api = axios.create({
   },
 });
 
-// Interceptor para agregar token Bearer
+// Interceptor para agregar token Bearer usando sessionStorage
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('auth_token');
+  const token = sessionStorage.getItem('auth_token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }

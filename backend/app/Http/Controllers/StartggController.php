@@ -35,13 +35,31 @@ class StartggController extends Controller
     public function callback(Request $request)
     {
         $state = $request->session()->pull('oauth_state');
+        $frontendUrl = env('FRONTEND_URL', 'https://startgg-manager-frontend-production.up.railway.app:8080');
+
         if (!$state || $state !== $request->query('state')) {
-            return response()->json(['error' => 'Invalid state'], 400);
+            // Log useful debugging info without exposing sensitive tokens
+            Log::warning('oauth callback state mismatch', [
+                'expected_state_exists' => (bool) $state,
+                'expected_state' => $state ? 'present' : 'missing',
+                'received_state' => $request->query('state'),
+                'session_id' => $request->session()->getId(),
+                'session_cookie' => $request->cookie(config('session.cookie')),
+            ]);
+
+            // Redirect to frontend with an error query param for better UX
+            return redirect()->away(rtrim($frontendUrl, '/') . '/auth/callback?error=invalid_state');
         }
 
         $code = $request->query('code');
         if (!$code) {
-            return response()->json(['error' => 'Missing authorization code'], 400);
+            Log::warning('oauth callback missing code', [
+                'session_id' => $request->session()->getId(),
+                'session_cookie' => $request->cookie(config('session.cookie')),
+                'query' => $request->query(),
+            ]);
+
+            return redirect()->away(rtrim($frontendUrl, '/') . '/auth/callback?error=missing_code');
         }
 
         // Intercambiar authorization code por access token
@@ -59,7 +77,7 @@ class StartggController extends Controller
                 'status' => $tokenResponse->status(),
                 'body' => $tokenResponse->body(),
             ]);
-            return response()->json(['error' => 'Token exchange failed'], 500);
+            return redirect()->away(rtrim($frontendUrl, '/') . '/auth/callback?error=token_exchange_failed');
         }
 
         $tokenData = $tokenResponse->json();

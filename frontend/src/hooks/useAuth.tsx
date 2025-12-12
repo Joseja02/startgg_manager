@@ -21,7 +21,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const token = searchParams.get('token');
     if (token) {
-      localStorage.setItem('auth_token', token);
+      sessionStorage.setItem('auth_token', token);
       // Limpiar URL
       window.history.replaceState({}, document.title, window.location.pathname);
     }
@@ -38,8 +38,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   const logout = () => {
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('mock_admin');
+    sessionStorage.removeItem('auth_token');
+    sessionStorage.removeItem('mock_admin');
     window.location.href = '/login';
   };
 
