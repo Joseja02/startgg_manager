@@ -17,7 +17,15 @@ class StartggController extends Controller
     public function login(Request $request)
     {
         $state = Str::random(32);
+        // Store state in session (primary) and also as a signed cookie (fallback/redundant)
         $request->session()->put('oauth_state', $state);
+        // Also store in a dedicated cookie to bypass session storage issues
+        Cookie::queue(Cookie::make('oauth_state_cookie', $state, 30, '/', null, true, true, false, 'None'));
+
+        Log::info('oauth login initiated', [
+            'state' => $state,
+            'session_id' => $request->session()->getId(),
+        ]);
 
         $params = http_build_query([
             'client_id' => config('startgg.client_id'),
@@ -34,14 +42,27 @@ class StartggController extends Controller
 
     public function callback(Request $request)
     {
-        $state = $request->session()->pull('oauth_state');
+        // Try to get state from session first (primary), then fallback to cookie (redundant for diagnosis)
+        $stateFromSession = $request->session()->pull('oauth_state');
+        $stateFromCookie = $request->cookie('oauth_state_cookie');
+        $state = $stateFromSession ?? $stateFromCookie;
+        
         $frontendUrl = env('FRONTEND_URL', 'https://startgg-manager-frontend-production.up.railway.app:8080');
+
+        Log::info('oauth callback received', [
+            'state_from_session_exists' => (bool) $stateFromSession,
+            'state_from_cookie_exists' => (bool) $stateFromCookie,
+            'received_state' => $request->query('state'),
+            'session_id' => $request->session()->getId(),
+            'session_cookie' => $request->cookie(config('session.cookie')),
+        ]);
 
         if (!$state || $state !== $request->query('state')) {
             // Log useful debugging info without exposing sensitive tokens
             Log::warning('oauth callback state mismatch', [
                 'expected_state_exists' => (bool) $state,
-                'expected_state' => $state ? 'present' : 'missing',
+                'expected_state_from_session' => (bool) $stateFromSession,
+                'expected_state_from_cookie' => (bool) $stateFromCookie,
                 'received_state' => $request->query('state'),
                 'session_id' => $request->session()->getId(),
                 'session_cookie' => $request->cookie(config('session.cookie')),
