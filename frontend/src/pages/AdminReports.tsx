@@ -82,53 +82,108 @@ export default function AdminReports() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Evento</TableHead>
-                        <TableHead>Ronda</TableHead>
-                        <TableHead>Jugadores</TableHead>
-                        <TableHead>Marcador</TableHead>
-                        <TableHead>Enviado por</TableHead>
-                        <TableHead>Fecha</TableHead>
-                        <TableHead className="text-right">Acción</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {reports.map((report) => (
-                        <TableRow key={report.id}>
-                          <TableCell className="font-medium">{report.eventName}</TableCell>
-                          <TableCell>{report.round}</TableCell>
-                          <TableCell>
-                            {report.p1.name} vs {report.p2.name}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline">
+                  {/* Mobile: cards */}
+                  <div className="space-y-3 md:hidden">
+                    {reports.map((report) => (
+                      <Card key={report.id}>
+                        <CardHeader className="space-y-2">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <CardTitle className="text-base truncate">{report.round}</CardTitle>
+                              <CardDescription className="truncate">{report.eventName}</CardDescription>
+                            </div>
+                            <Badge variant="outline" className="shrink-0">
                               {report.scoreP1} - {report.scoreP2}
                             </Badge>
-                          </TableCell>
-                          <TableCell>{report.submittedBy}</TableCell>
-                          <TableCell>
-                            {new Date(report.createdAt).toLocaleDateString('es-ES', {
-                              day: '2-digit',
-                              month: '2-digit',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Button
-                              size="sm"
-                              variant={filter === 'pending' ? 'default' : 'outline'}
-                              onClick={() => navigate(`/admin/reports/${report.id}`)}
-                            >
-                              Ver Detalle
-                            </Button>
-                          </TableCell>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <div className="text-sm">
+                            <div className="text-muted-foreground">Jugadores</div>
+                            <div className="font-medium truncate">{report.p1.name} vs {report.p2.name}</div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3 text-sm">
+                            <div>
+                              <div className="text-muted-foreground">Enviado por</div>
+                              <div className="font-medium truncate">{report.submittedBy}</div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-muted-foreground">Fecha</div>
+                              <div className="font-medium">
+                                {new Date(report.createdAt).toLocaleDateString('es-ES', {
+                                  day: '2-digit',
+                                  month: '2-digit',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })}
+                              </div>
+                            </div>
+                          </div>
+
+                          <Button
+                            size="sm"
+                            variant={filter === 'pending' ? 'default' : 'outline'}
+                            onClick={() => navigate(`/admin/reports/${report.id}`)}
+                            className="w-full"
+                          >
+                            Ver Detalle
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+
+                  {/* Desktop: table */}
+                  <div className="hidden md:block">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Evento</TableHead>
+                          <TableHead>Ronda</TableHead>
+                          <TableHead>Jugadores</TableHead>
+                          <TableHead>Marcador</TableHead>
+                          <TableHead>Enviado por</TableHead>
+                          <TableHead>Fecha</TableHead>
+                          <TableHead className="text-right">Acción</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {reports.map((report) => (
+                          <TableRow key={report.id}>
+                            <TableCell className="font-medium">{report.eventName}</TableCell>
+                            <TableCell>{report.round}</TableCell>
+                            <TableCell>
+                              {report.p1.name} vs {report.p2.name}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline">
+                                {report.scoreP1} - {report.scoreP2}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>{report.submittedBy}</TableCell>
+                            <TableCell>
+                              {new Date(report.createdAt).toLocaleDateString('es-ES', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                size="sm"
+                                variant={filter === 'pending' ? 'default' : 'outline'}
+                                onClick={() => navigate(`/admin/reports/${report.id}`)}
+                              >
+                                Ver Detalle
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </CardContent>
               </Card>
             )}

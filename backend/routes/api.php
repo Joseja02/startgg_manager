@@ -11,12 +11,6 @@ use App\Http\Controllers\DebugController;
 
 Route::get('/ping', fn () => response()->json(['ok' => true]));
 
-// Debug routes (TEMPORARY - Remove in production)
-Route::prefix('debug')->group(function () {
-    Route::get('/tournaments-raw', [DebugController::class, 'tournamentsRaw']);
-    Route::get('/user-info', [DebugController::class, 'userInfo']);
-});
-
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {
     // Usuario actual

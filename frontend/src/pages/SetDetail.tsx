@@ -31,7 +31,6 @@ export default function SetDetail() {
     { index: 1, stage: null, winner: null, stocksP1: null, stocksP2: null },
   ]);
   const [openSections, setOpenSections] = useState<string[]>(['bans-1', 'game-1']);
-  const [bestOf, setBestOf] = useState<number | null>(null);
   const currentGame = games[games.length - 1];
 
   const { data: setDetail, isLoading } = useQuery({
@@ -40,9 +39,11 @@ export default function SetDetail() {
     enabled: !!setId,
   });
 
-  // Sincronizar estado inicial con reporte existente (si lo hay)
+  // Sincronizar estado inicial con reporte existente (si lo hay) o con datos del servidor
   useEffect(() => {
-    if (setDetail?.existingReport && setDetail.existingReport.games?.length > 0) {
+    if (!setDetail) return;
+
+    if (setDetail.existingReport && setDetail.existingReport.games?.length > 0) {
       const reportGames = setDetail.existingReport.games.map((g) => ({
         index: g.index,
         stage: g.stage,
@@ -53,14 +54,10 @@ export default function SetDetail() {
         characterP2: g.characterP2,
       } as GameRecord));
       setGames(reportGames);
+    } else if (setDetail.games?.length > 0) {
+      setGames(setDetail.games);
     }
-  }, [setDetail?.existingReport]);
-
-  useEffect(() => {
-    if (setDetail?.bestOf) {
-      setBestOf(setDetail.bestOf);
-    }
-  }, [setDetail?.bestOf]);
+  }, [setDetail]);
 
   const submitMutation = useMutation({
     mutationFn: (data: { games: GameRecord[] }) => competitorApi.submitReport(setId!, data),
@@ -96,15 +93,18 @@ export default function SetDetail() {
       String(user.startgg_user_id) === String(setDetail?.p2?.userId));
   const isAdminFromSet = !!setDetail?.isAdmin;
   const isAdminUser = user?.role === 'admin';
-  const canManageProgress = isAdminFromSet || isParticipant || isAdminUser;
+  const canViewSet = isAdminFromSet || isParticipant || isAdminUser;
 
   const reportStatus = setDetail?.existingReport?.status;
   const lockedByReport = reportStatus === 'pending' || reportStatus === 'approved';
   const rejectedReport = reportStatus === 'rejected';
 
-  const effectiveBestOf = bestOf ?? setDetail?.bestOf ?? 3;
+  const effectiveBestOf = setDetail?.bestOf ?? 3;
   const score = useMemo(() => calculateScore(games), [games]);
   const gamesNeeded = Math.ceil(effectiveBestOf / 2);
+
+  // Solo participantes pueden hacer RPS/Bans/Games (admins NO interfieren salvo que participen)
+  const canPlayerWorkflow = isParticipant && setDetail?.status === 'in_progress' && !lockedByReport;
 
   if (isLoading) {
     return (
@@ -343,14 +343,6 @@ export default function SetDetail() {
             <div className="text-center">
               <span className="text-sm text-muted-foreground">Best of</span>
               <div className="text-lg font-semibold">{effectiveBestOf}</div>
-              <div className="flex items-center gap-2 justify-center mt-2">
-                <Button variant={effectiveBestOf === 3 ? 'default' : 'outline'} size="sm" onClick={() => setBestOf(3)}>
-                  BO3
-                </Button>
-                <Button variant={effectiveBestOf === 5 ? 'default' : 'outline'} size="sm" onClick={() => setBestOf(5)}>
-                  BO5
-                </Button>
-              </div>
             </div>
             <div className="flex flex-col text-right">
               <span className="text-sm text-muted-foreground">{setDetail.p2.name}</span>
@@ -375,7 +367,7 @@ export default function SetDetail() {
           </Card>
         )}
 
-        {canManageProgress ? (
+        {canPlayerWorkflow ? (
           <>
             {!rpsWinner && (
               <Card>
@@ -481,10 +473,69 @@ export default function SetDetail() {
             </Button>
           </>
         ) : (
-          <div className="text-center py-6">
-            <p className="text-muted-foreground">No tienes permisos para gestionar este set desde aquí.</p>
-            <p className="text-sm text-muted-foreground">Si eres participante, accede al set con el botón 'Progreso' desde la lista de sets.</p>
-          </div>
+          <>
+            {!canViewSet ? (
+              <div className="text-center py-6">
+                <p className="text-muted-foreground">No tienes permisos para ver este set.</p>
+              </div>
+            ) : (
+              <>
+                {setDetail.status === 'not_started' && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Set sin iniciar</CardTitle>
+                      <CardDescription>
+                        Este set aún no ha sido marcado como iniciado. El admin puede iniciarlo desde la lista del evento.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <Button className="w-full" variant="outline" onClick={() => navigate(`/events/${setDetail.eventId}`)}>
+                        Volver al evento
+                      </Button>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {setDetail.status !== 'not_started' && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>
+                        {setDetail.status === 'in_progress' ? 'Vista de solo lectura' : 'Resultados'}
+                      </CardTitle>
+                      <CardDescription>
+                        {isParticipant
+                          ? 'Para reportar, entra al modo Progreso desde la lista del evento.'
+                          : 'Aquí puedes ver el estado y los games del set.'}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {(setDetail.games?.length ?? 0) > 0 ? (
+                        <div className="space-y-3">
+                          {setDetail.games.map((game) => (
+                            <GameRow
+                              key={game.index}
+                              game={game}
+                              p1Name={setDetail.p1.name}
+                              p2Name={setDetail.p2.name}
+                              onChange={() => {}}
+                              readonly={true}
+                              lockStage={false}
+                            />
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">No hay games disponibles para mostrar.</p>
+                      )}
+
+                      <Button className="w-full" variant="outline" onClick={() => navigate(`/events/${setDetail.eventId}`)}>
+                        Volver al evento
+                      </Button>
+                    </CardContent>
+                  </Card>
+                )}
+              </>
+            )}
+          </>
         )}
       </div>
     </AppLayout>

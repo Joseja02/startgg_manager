@@ -1,6 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,7 +10,6 @@ import { competitorApi } from '@/lib/api';
 import { ArrowLeft, Trophy, Eye, Play } from 'lucide-react';
 import type { SetSummary } from '@/types';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from '@/components/ui/alert-dialog';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 
@@ -20,7 +18,6 @@ export default function EventDetail() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
-  const queryClient = useQueryClient();
 
   const { data: event, isLoading: eventLoading } = useQuery({
     queryKey: ['event', eventId],
@@ -57,24 +54,10 @@ export default function EventDetail() {
     },
   });
 
-  // Modal / diálogo para seleccionar bestOf antes de iniciar set
-  const [showStartDialog, setShowStartDialog] = useState(false);
-  const [pendingStartSetId, setPendingStartSetId] = useState<number | null>(null);
-  const [selectedBestOf, setSelectedBestOf] = useState<3 | 5>(3);
-
-  const handleStartClick = (setId: number) => {
-    setPendingStartSetId(setId);
-    setSelectedBestOf(3);
-    setShowStartDialog(true);
-  };
-
-  const confirmStart = async () => {
-    if (!pendingStartSetId) return;
+  const handleStartClick = async (setId: number) => {
     try {
-      await startSetMutation.mutateAsync(pendingStartSetId);
-      setShowStartDialog(false);
-      // Navegar al set con el bestOf elegido para que el UI lo use
-      navigate(`/sets/${pendingStartSetId}?bestOf=${selectedBestOf}`);
+      await startSetMutation.mutateAsync(setId);
+      // Mantener al admin en la lista de sets (no redirigir al flujo de bans)
     } catch (e) {
       // error ya manejado por onError
     }
@@ -204,27 +187,6 @@ export default function EventDetail() {
               </Card>
             ) : (
               <>
-                {/* Dialog para seleccionar BestOf antes de iniciar set */}
-                <AlertDialog open={showStartDialog} onOpenChange={setShowStartDialog}>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Iniciar Set</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        ¿Qué formato de set quieres usar para este match? Selecciona Best of 3 o Best of 5.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <div className="space-y-4 mt-2">
-                      <div className="flex gap-2">
-                        <Button variant={selectedBestOf === 3 ? 'default' : 'outline'} onClick={() => setSelectedBestOf(3)}>BO3</Button>
-                        <Button variant={selectedBestOf === 5 ? 'default' : 'outline'} onClick={() => setSelectedBestOf(5)}>BO5</Button>
-                      </div>
-                    </div>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                      <AlertDialogAction onClick={confirmStart}>Iniciar Set</AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
               <Card>
                 <CardHeader>
                   <CardTitle>Sets del Evento</CardTitle>
@@ -233,102 +195,165 @@ export default function EventDetail() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Ronda</TableHead>
-                        <TableHead>Jugadores</TableHead>
-                        <TableHead>Best of</TableHead>
-                        <TableHead>Estado</TableHead>
-                        <TableHead className="text-right">Acción</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {sets.map((set) => {
-                        const status = set.status as SetStatus;
-                        const statusInfo = getStatusBadge(status);
-                        const userOwnsSet = isUserSet(set);
+                  {/* Mobile: cards (más visual, sin scroll lateral) */}
+                  <div className="space-y-3 md:hidden">
+                    {sets.map((set) => {
+                      const status = set.status as SetStatus;
+                      const statusInfo = getStatusBadge(status);
+                      const userOwnsSet = isUserSet(set);
+
+                      const action = (() => {
+                        if (event.isAdmin) {
+                          if (set.status === 'not_started') {
+                            return (
+                              <Button
+                                size="sm"
+                                variant="default"
+                                onClick={() => handleStartClick(Number(set.id))}
+                                disabled={startSetMutation.isPending}
+                                className="w-full"
+                              >
+                                <Play className="h-4 w-4 mr-1" />
+                                Iniciar Set
+                              </Button>
+                            );
+                          }
+                          if (status === 'in_progress') {
+                            return (
+                              <Button size="sm" variant="default" onClick={() => navigate(`/sets/${set.id}`)} className="w-full">
+                                Ver Set
+                              </Button>
+                            );
+                          }
+                          if (status === 'completed') {
+                            return (
+                              <Button size="sm" variant="outline" onClick={() => navigate(`/sets/${set.id}`)} className="w-full">
+                                <Eye className="h-4 w-4 mr-1" />
+                                Ver Resultados
+                              </Button>
+                            );
+                          }
+                        }
+
+                        if (userOwnsSet && set.status === 'in_progress') {
+                          return (
+                            <Button size="sm" variant="default" onClick={() => navigate(`/sets/${set.id}?mode=player`)} className="w-full">
+                              Progreso
+                            </Button>
+                          );
+                        }
+
                         return (
-                          <TableRow key={set.id}>
-                            <TableCell className="font-medium">{set.round}</TableCell>
-                            <TableCell>
-                              {set.p1.name} vs {set.p2.name}
-                            </TableCell>
-                            <TableCell>{set.bestOf}</TableCell>
-                            <TableCell>
-                              <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {event.isAdmin ? (
-                                // Admin puede iniciar sets y navegar a ellos
-                                <div className="flex gap-2 justify-end">
-                                  {set.status === 'not_started' && (
-                                    <Button
-                                      size="sm"
-                                      variant="default"
-                                              onClick={() => handleStartClick(Number(set.id))}
-                                      disabled={startSetMutation.isPending}
-                                    >
-                                      <Play className="h-4 w-4 mr-1" />
-                                      Iniciar Set
+                          <Button size="sm" variant="outline" onClick={() => navigate(`/sets/${set.id}`)} className="w-full">
+                            <Eye className="h-4 w-4 mr-1" />
+                            Ver
+                          </Button>
+                        );
+                      })();
+
+                      return (
+                        <Card key={set.id}>
+                          <CardHeader className="space-y-2">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <CardTitle className="text-base truncate">{set.round}</CardTitle>
+                                <CardDescription className="truncate">
+                                  {set.p1.name} vs {set.p2.name}
+                                </CardDescription>
+                              </div>
+                              <Badge variant={statusInfo.variant} className="shrink-0">
+                                {statusInfo.label}
+                              </Badge>
+                            </div>
+                          </CardHeader>
+                          <CardContent className="space-y-3">
+                            <div className="flex items-center justify-between text-sm text-muted-foreground">
+                              <span>Best of</span>
+                              <span className="font-medium text-foreground">{set.bestOf}</span>
+                            </div>
+                            {action}
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+
+                  {/* Desktop: table */}
+                  <div className="hidden md:block">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Ronda</TableHead>
+                          <TableHead>Jugadores</TableHead>
+                          <TableHead>Best of</TableHead>
+                          <TableHead>Estado</TableHead>
+                          <TableHead className="text-right">Acción</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {sets.map((set) => {
+                          const status = set.status as SetStatus;
+                          const statusInfo = getStatusBadge(status);
+                          const userOwnsSet = isUserSet(set);
+                          return (
+                            <TableRow key={set.id}>
+                              <TableCell className="font-medium">{set.round}</TableCell>
+                              <TableCell>
+                                {set.p1.name} vs {set.p2.name}
+                              </TableCell>
+                              <TableCell>{set.bestOf}</TableCell>
+                              <TableCell>
+                                <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {event.isAdmin ? (
+                                  <div className="flex gap-2 justify-end">
+                                    {set.status === 'not_started' && (
+                                      <Button
+                                        size="sm"
+                                        variant="default"
+                                        onClick={() => handleStartClick(Number(set.id))}
+                                        disabled={startSetMutation.isPending}
+                                      >
+                                        <Play className="h-4 w-4 mr-1" />
+                                        Iniciar Set
+                                      </Button>
+                                    )}
+                                    {status === 'in_progress' && (
+                                      <Button size="sm" variant="default" onClick={() => navigate(`/sets/${set.id}`)}>
+                                        Ver Set
+                                      </Button>
+                                    )}
+                                    {status === 'completed' && (
+                                      <Button size="sm" variant="outline" onClick={() => navigate(`/sets/${set.id}`)}>
+                                        <Eye className="h-4 w-4 mr-1" />
+                                        Ver Resultados
+                                      </Button>
+                                    )}
+                                  </div>
+                                ) : userOwnsSet ? (
+                                  set.status === 'in_progress' ? (
+                                    <Button size="sm" variant="default" onClick={() => navigate(`/sets/${set.id}?mode=player`)}>
+                                      Progreso
                                     </Button>
-                                  )}
-                                  {status === 'in_progress' && (
-                                    <Button
-                                      size="sm"
-                                      variant="default"
-                                      onClick={() => navigate(`/sets/${set.id}`)}
-                                    >
-                                      Ver Set
+                                  ) : (
+                                    <Button size="sm" variant="outline" onClick={() => navigate(`/sets/${set.id}`)}>
+                                      Ver
                                     </Button>
-                                  )}
-                                  {status === 'completed' && (
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => navigate(`/sets/${set.id}`)}
-                                    >
-                                      <Eye className="h-4 w-4 mr-1" />
-                                      Ver Resultados
-                                    </Button>
-                                  )}
-                                </div>
-                              ) : userOwnsSet ? (
-                                // Usuario que participa en el set
-                                set.status === 'in_progress' ? (
-                                  <Button
-                                    size="sm"
-                                    variant="default"
-                                    onClick={() => navigate(`/sets/${set.id}?mode=player`)}
-                                  >
-                                    Progreso
-                                  </Button>
+                                  )
                                 ) : (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => navigate(`/sets/${set.id}`)}
-                                  >
+                                  <Button size="sm" variant="ghost" onClick={() => navigate(`/sets/${set.id}`)}>
+                                    <Eye className="h-4 w-4 mr-1" />
                                     Ver
                                   </Button>
-                                )
-                              ) : (
-                                // Usuario que solo puede ver
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => navigate(`/sets/${set.id}`)}
-                                >
-                                  <Eye className="h-4 w-4 mr-1" />
-                                  Ver
-                                </Button>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </CardContent>
               </Card>
               </>
