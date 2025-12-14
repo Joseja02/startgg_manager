@@ -8,7 +8,7 @@ import {
 import { Play, Eye, Settings, Loader2 } from 'lucide-react';
 
 interface SetActionsProps {
-  status: 'not_started' | 'in_progress' | 'reported' | 'approved' | 'rejected';
+  status: 'not_started' | 'in_progress' | 'completed' | 'reported' | 'approved' | 'rejected';
   isAdmin: boolean;
   onStart?: () => void;
   onView?: () => void;
@@ -43,7 +43,7 @@ export function SetActions({
         </Button>
       )}
 
-      {status === 'in_progress' && (
+      {(status === 'in_progress' || status === 'completed' || status === 'reported' || status === 'approved' || status === 'rejected') && (
         <Button onClick={onView} variant="outline">
           <Eye className="mr-2 h-4 w-4" />
           Ver Set

@@ -197,18 +197,28 @@ class SetController extends Controller
             // Obtener información del set desde start.gg
             $setDetail = $this->client->getSetDetail($user, $setId);
             
-            // Validar que el usuario es uno de los participantes del set
-            $userStartggId = $user->startgg_user_id;
-            $p1StartggId = $setDetail['p1']['participantId'] ?? null;
-            $p2StartggId = $setDetail['p2']['participantId'] ?? null;
-            
-            if ($userStartggId !== $p1StartggId && $userStartggId !== $p2StartggId) {
+            // Validar que el usuario es uno de los participantes del set (userId o participant/entrant)
+            $userStartggId = (string) $user->startgg_user_id;
+            $p1Ids = array_filter([
+                isset($setDetail['p1']['userId']) ? (string) $setDetail['p1']['userId'] : null,
+                isset($setDetail['p1']['participantId']) ? (string) $setDetail['p1']['participantId'] : null,
+                isset($setDetail['p1']['entrantId']) ? (string) $setDetail['p1']['entrantId'] : null,
+            ]);
+            $p2Ids = array_filter([
+                isset($setDetail['p2']['userId']) ? (string) $setDetail['p2']['userId'] : null,
+                isset($setDetail['p2']['participantId']) ? (string) $setDetail['p2']['participantId'] : null,
+                isset($setDetail['p2']['entrantId']) ? (string) $setDetail['p2']['entrantId'] : null,
+            ]);
+
+            $isParticipant = in_array($userStartggId, $p1Ids, true) || in_array($userStartggId, $p2Ids, true);
+
+            if (!$isParticipant) {
                 Log::warning('User attempted to submit report for set they do not participate in', [
                     'user_id' => $user->id,
                     'user_startgg_id' => $userStartggId,
                     'set_id' => $setId,
-                    'p1_startgg_id' => $p1StartggId,
-                    'p2_startgg_id' => $p2StartggId,
+                    'p1_ids' => $p1Ids,
+                    'p2_ids' => $p2Ids,
                 ]);
                 
                 return response()->json([

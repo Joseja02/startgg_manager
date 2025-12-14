@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
-import { GameRow } from '@/components/set/GameRow';
 import { ScoreBoard } from '@/components/set/ScoreBoard';
 import {
   AlertDialog,
@@ -46,10 +45,10 @@ export default function AdminReportDetail() {
       queryClient.invalidateQueries({ queryKey: ['adminReports'] });
       setTimeout(() => navigate('/admin/reports'), 1000);
     },
-    onError: (error: any) => {
+    onError: () => {
       toast({
-        title: 'Error al aprobar',
-        description: error.response?.data?.message || 'Ha ocurrido un error',
+        title: 'Error',
+        description: 'No se pudo aprobar el reporte',
         variant: 'destructive',
       });
     },
@@ -61,15 +60,14 @@ export default function AdminReportDetail() {
       toast({
         title: 'Reporte rechazado',
         description: 'El competidor será notificado',
-        variant: 'destructive',
       });
       queryClient.invalidateQueries({ queryKey: ['adminReports'] });
       setTimeout(() => navigate('/admin/reports'), 1000);
     },
-    onError: (error: any) => {
+    onError: () => {
       toast({
-        title: 'Error al rechazar',
-        description: error.response?.data?.message || 'Ha ocurrido un error',
+        title: 'Error',
+        description: 'No se pudo rechazar el reporte',
         variant: 'destructive',
       });
     },
@@ -78,7 +76,11 @@ export default function AdminReportDetail() {
   if (isLoading) {
     return (
       <AppLayout>
-        <Skeleton className="h-96" />
+        <div className="space-y-4">
+          <Skeleton className="h-16" />
+          <Skeleton className="h-32" />
+          <Skeleton className="h-48" />
+        </div>
       </AppLayout>
     );
   }
@@ -88,6 +90,9 @@ export default function AdminReportDetail() {
       <AppLayout>
         <div className="text-center py-10">
           <p className="text-muted-foreground">Reporte no encontrado</p>
+          <Button variant="outline" onClick={() => navigate('/admin/reports')} className="mt-4">
+            Volver
+          </Button>
         </div>
       </AppLayout>
     );
@@ -102,7 +107,7 @@ export default function AdminReportDetail() {
       toast({
         variant: 'destructive',
         title: 'Motivo requerido',
-        description: 'Debes proporcionar un motivo para rechazar',
+        description: 'Debes indicar un motivo para rechazar',
       });
       return;
     }
@@ -113,40 +118,50 @@ export default function AdminReportDetail() {
 
   return (
     <AppLayout>
-      <div className="space-y-6 max-w-5xl mx-auto">
+      <div className="space-y-5">
         {/* Header */}
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/admin/reports')}>
-            <ArrowLeft className="h-5 w-5" />
+        <div className="flex items-start gap-3">
+          <Button variant="ghost" size="icon" onClick={() => navigate('/admin/reports')} className="shrink-0">
+            <ArrowLeft className="w-5 h-5" />
           </Button>
-          <div className="flex-1">
-            <h1 className="text-2xl font-bold">{report.eventName}</h1>
-            <p className="text-muted-foreground">{report.round}</p>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xl font-display truncate">{report.round}</h1>
+            <p className="text-sm text-muted-foreground truncate">{report.eventName}</p>
           </div>
-          <Badge variant={report.status === 'approved' ? 'secondary' : report.status === 'rejected' ? 'destructive' : 'default'}>
+          <Badge 
+            variant={report.status === 'rejected' ? 'destructive' : report.status === 'approved' ? 'outline' : 'secondary'}
+            className="shrink-0"
+          >
             {report.status === 'approved' ? 'Aprobado' : report.status === 'rejected' ? 'Rechazado' : 'Pendiente'}
           </Badge>
         </div>
 
+        {/* Score Board */}
+        <ScoreBoard
+          p1Name={report.p1.name}
+          p2Name={report.p2.name}
+          p1Score={report.scoreP1}
+          p2Score={report.scoreP2}
+          bestOf={report.games.length}
+        />
+
         {/* Set Info */}
         <Card>
-          <CardHeader>
-            <CardTitle>Información del Set</CardTitle>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Información</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2">
+          <CardContent className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Jugadores:</span>
-              <span className="font-semibold">
-                {report.p1.name} vs {report.p2.name}
-              </span>
+              <span className="text-muted-foreground">Jugadores</span>
+              <span className="font-medium truncate ml-2">{report.p1.name} vs {report.p2.name}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Enviado por:</span>
-              <span className="font-semibold">{report.submittedBy}</span>
+              <span className="text-muted-foreground">Enviado por</span>
+              <span className="font-medium">{report.submittedBy}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Fecha:</span>
-              <span className="font-semibold">
+              <span className="text-muted-foreground">Fecha</span>
+              <span className="font-medium">
                 {new Date(report.createdAt).toLocaleDateString('es-ES', {
                   day: '2-digit',
                   month: '2-digit',
@@ -156,80 +171,78 @@ export default function AdminReportDetail() {
                 })}
               </span>
             </div>
-            {report.notes && (
-              <div className="pt-2 border-t">
-                <span className="text-muted-foreground">Notas:</span>
-                <p className="mt-1">{report.notes}</p>
-              </div>
-            )}
           </CardContent>
         </Card>
 
-        {/* Score */}
-        <ScoreBoard
-          p1Name={report.p1.name}
-          p2Name={report.p2.name}
-          p1Score={report.scoreP1}
-          p2Score={report.scoreP2}
-          bestOf={report.games.length}
-        />
-
         {/* Games */}
-        <div className="space-y-4">
-          <h2 className="text-xl font-semibold">Games del Set</h2>
+        <section className="space-y-3">
+          <h2 className="text-lg font-display">Games</h2>
           {report.games.map((game) => (
-            <GameRow
-              key={game.index}
-              game={game}
-              p1Name={report.p1.name}
-              p2Name={report.p2.name}
-              onChange={() => {}}
-              readonly
-            />
+            <Card key={game.index}>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-medium">Game {game.index}</span>
+                  <Badge variant="outline">{game.stage}</Badge>
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className={`p-2 rounded-lg text-center ${game.winner === 'p1' ? 'bg-success/10 text-success' : 'bg-muted'}`}>
+                    <p className="text-xs text-muted-foreground mb-0.5">{report.p1.name}</p>
+                    <p className="font-medium">{game.characterP1 || '-'}</p>
+                    <p className="text-xs">{game.stocksP1} stocks</p>
+                  </div>
+                  <div className={`p-2 rounded-lg text-center ${game.winner === 'p2' ? 'bg-success/10 text-success' : 'bg-muted'}`}>
+                    <p className="text-xs text-muted-foreground mb-0.5">{report.p2.name}</p>
+                    <p className="font-medium">{game.characterP2 || '-'}</p>
+                    <p className="text-xs">{game.stocksP2} stocks</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           ))}
-        </div>
+        </section>
 
         {/* Actions */}
         {isPending && (
-          <div className="flex gap-4">
+          <div className="space-y-3 pt-2">
             <Button
               onClick={handleApprove}
               disabled={approveMutation.isPending}
-              className="flex-1 bg-gradient-success py-6 text-lg"
               size="lg"
+              className="w-full bg-green-600 hover:bg-green-700 text-white"
             >
-              <Check className="mr-2 h-5 w-5" />
+              <Check className="w-5 h-5 mr-2" />
               {approveMutation.isPending ? 'Aprobando...' : 'Aprobar Reporte'}
             </Button>
 
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button variant="destructive" className="flex-1 py-6 text-lg" size="lg">
-                  <X className="mr-2 h-5 w-5" />
+                <Button variant="destructive" size="lg" className="w-full">
+                  <X className="w-5 h-5 mr-2" />
                   Rechazar Reporte
                 </Button>
               </AlertDialogTrigger>
-              <AlertDialogContent>
+              <AlertDialogContent className="max-w-sm mx-4">
                 <AlertDialogHeader>
-                  <AlertDialogTitle>¿Rechazar este reporte?</AlertDialogTitle>
+                  <AlertDialogTitle>¿Rechazar reporte?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Proporciona un motivo para el rechazo. El competidor recibirá esta información.
+                    Indica el motivo del rechazo. El competidor será notificado.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <Textarea
                   placeholder="Motivo del rechazo..."
                   value={rejectionReason}
                   onChange={(e) => setRejectionReason(e.target.value)}
-                  rows={4}
+                  rows={3}
+                  className="mt-2"
                 />
-                <AlertDialogFooter>
+                <AlertDialogFooter className="gap-2">
                   <AlertDialogCancel>Cancelar</AlertDialogCancel>
                   <AlertDialogAction
                     onClick={handleReject}
                     disabled={rejectMutation.isPending || !rejectionReason.trim()}
                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   >
-                    {rejectMutation.isPending ? 'Rechazando...' : 'Confirmar Rechazo'}
+                    {rejectMutation.isPending ? 'Rechazando...' : 'Confirmar'}
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
@@ -238,12 +251,12 @@ export default function AdminReportDetail() {
         )}
 
         {report.status === 'rejected' && report.rejectionReason && (
-          <Card className="border-destructive">
-            <CardHeader>
-              <CardTitle className="text-destructive">Motivo del Rechazo</CardTitle>
+          <Card className="border-destructive/50">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base text-destructive">Motivo del rechazo</CardTitle>
             </CardHeader>
             <CardContent>
-              <p>{report.rejectionReason}</p>
+              <p className="text-sm">{report.rejectionReason}</p>
             </CardContent>
           </Card>
         )}

@@ -8,13 +8,14 @@ interface SetHeaderProps {
   p1Name: string;
   p2Name: string;
   bestOf: number;
-  status: 'not_started' | 'in_progress' | 'reported' | 'approved' | 'rejected';
+  status: 'not_started' | 'in_progress' | 'completed' | 'reported' | 'approved' | 'rejected';
   eventId?: string | number;
 }
 
 const statusConfig = {
   not_started: { label: 'Sin iniciar', variant: 'secondary' as const },
   in_progress: { label: 'En progreso', variant: 'default' as const },
+  completed: { label: 'Completado', variant: 'outline' as const },
   reported: { label: 'Reportado', variant: 'outline' as const },
   approved: { label: 'Aprobado', variant: 'default' as const },
   rejected: { label: 'Rechazado', variant: 'destructive' as const },

@@ -84,7 +84,7 @@ export default function SetPage() {
         setGames([{ index: 1, stage: null, winner: null, stocksP1: null, stocksP2: null }]);
       }
     }
-  }, [setDetail]);
+  }, [setDetail, games.length]);
 
   // Determine if user can access player mode
   const canAccessPlayerMode = useMemo(() => {
@@ -93,17 +93,36 @@ export default function SetPage() {
     const userStartggId = user.startgg_user_id;
     const isP1 = setDetail.p1.userId?.toString() === userStartggId;
     const isP2 = setDetail.p2.userId?.toString() === userStartggId;
-    const isAdmin = user.role === 'admin' || (setDetail as any).isAdmin;
+    const isAdminOrCanAccess = user.role === 'admin' || ('isAdmin' in setDetail && (setDetail as { isAdmin?: boolean }).isAdmin);
     
-    return isP1 || isP2 || isAdmin;
+    return isP1 || isP2 || isAdminOrCanAccess;
   }, [setDetail, user]);
 
-  const isAdmin = user?.role === 'admin' || (setDetail as any)?.isAdmin;
+  const isAdmin = user?.role === 'admin' || ('isAdmin' in (setDetail || {}) && (setDetail as { isAdmin?: boolean })?.isAdmin);
   const showPlayerView = isPlayerMode && canAccessPlayerMode && setDetail?.status === 'in_progress';
 
   // Calculate scores
   const score = useMemo(() => calculateScore(games), [games]);
   const gamesNeeded = setDetail ? Math.ceil(setDetail.bestOf / 2) : 2;
+
+  // Stage selection logic - moved before early returns to prevent conditional hook calls
+  const currentGame = games[games.length - 1];
+  const isGame1 = games.length === 1 && !currentGame?.stage;
+  const needsStagePick = currentGame && !currentGame.stage && bannedStages.length > 0;
+  
+  // Calculate bans remaining - moved before early returns
+  const bansRemaining = useMemo(() => {
+    if (isGame1) {
+      // Game 1: RPS winner bans 3, then loser bans 4 (total 7)
+      const totalBansGame1 = 7;
+      return Math.max(0, totalBansGame1 - bannedStages.length);
+    } else {
+      // Subsequent games: winner bans 3
+      return Math.max(0, 3 - bannedStages.length);
+    }
+  }, [isGame1, bannedStages]);
+
+  const showStageSelection = rpsWinner && currentGame && !currentGame.stage;
 
   // Loading state
   if (isLoading) {
@@ -120,7 +139,6 @@ export default function SetPage() {
 
   // Error / Not found state
   if (isError || !setDetail) {
-    const status = (error as any)?.response?.status;
     return (
       <AppLayout>
         <SetNotFound 
@@ -135,11 +153,11 @@ export default function SetPage() {
   const handleStartSet = async () => {
     try {
       await startSet();
-      // Refrescar datos del set sin recargar la página
       await refetch();
-    } catch (err: any) {
-      if (err?.response?.status === 403) {
-        setScopeErrorMessage(err?.response?.data?.message || '');
+    } catch (err) {
+      const axiosError = err as { response?: { status?: number; data?: { message?: string } } } | undefined;
+      if (axiosError?.response?.status === 403) {
+        setScopeErrorMessage(axiosError?.response?.data?.message || '');
         setScopeErrorOpen(true);
       }
     }
@@ -236,32 +254,14 @@ export default function SetPage() {
     try {
       await submitReport({ games, notes: notes || undefined });
       setTimeout(() => navigate('/dashboard'), 1500);
-    } catch (err: any) {
-      if (err?.response?.status === 403) {
-        setScopeErrorMessage(err?.response?.data?.message || '');
+    } catch (err) {
+      const axiosError = err as { response?: { status?: number; data?: { message?: string } } } | undefined;
+      if (axiosError?.response?.status === 403) {
+        setScopeErrorMessage(axiosError?.response?.data?.message || '');
         setScopeErrorOpen(true);
       }
     }
   };
-
-  // Stage selection logic
-  const currentGame = games[games.length - 1];
-  const isGame1 = games.length === 1 && !currentGame?.stage;
-  const needsStagePick = currentGame && !currentGame.stage && bannedStages.length > 0;
-  
-  // Calculate bans remaining
-  const bansRemaining = useMemo(() => {
-    if (isGame1) {
-      // Game 1: RPS winner bans 3, then loser bans 4 (total 7)
-      const totalBansGame1 = 7;
-      return Math.max(0, totalBansGame1 - bannedStages.length);
-    } else {
-      // Subsequent games: winner bans 3
-      return Math.max(0, 3 - bannedStages.length);
-    }
-  }, [isGame1, bannedStages]);
-
-  const showStageSelection = rpsWinner && currentGame && !currentGame.stage;
 
   return (
     <AppLayout>

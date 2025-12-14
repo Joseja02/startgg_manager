@@ -3,13 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { adminApi } from '@/lib/api';
-import { FileCheck, AlertCircle } from 'lucide-react';
+import { FileCheck, AlertCircle, RefreshCw } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
 
 export default function AdminReports() {
   const navigate = useNavigate();
@@ -21,174 +20,120 @@ export default function AdminReports() {
     queryFn: () => adminApi.getReports({ status: filter }),
   });
 
-  const getStatusBadge = (status: string) => {
-    const variants: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' }> = {
-      pending: { label: 'Pendiente', variant: 'default' },
-      approved: { label: 'Aprobado', variant: 'secondary' },
-      rejected: { label: 'Rechazado', variant: 'destructive' },
-    };
-    return variants[status] || { label: status, variant: 'secondary' };
-  };
+  const filters = [
+    { value: 'pending' as const, label: 'Pendientes' },
+    { value: 'approved' as const, label: 'Aprobados' },
+    { value: 'rejected' as const, label: 'Rechazados' },
+  ];
 
   return (
     <AppLayout>
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Reportes de Sets</h1>
-          <p className="text-muted-foreground">Revisa y aprueba reportes de competidores</p>
-          <div className="mt-4">
-            <Button
-              variant="outline"
-              onClick={() => queryClient.invalidateQueries({ queryKey: ['adminReports'] })}
-            >
-              Refrescar reportes
-            </Button>
-          </div>
+      <div className="space-y-5">
+        {/* Header */}
+        <div className="space-y-1">
+          <h1 className="text-2xl font-display">Reportes</h1>
+          <p className="text-sm text-muted-foreground">Revisa y aprueba reportes de sets</p>
         </div>
 
-        <Tabs value={filter} onValueChange={(v) => setFilter(v as typeof filter)}>
-          <TabsList>
-            <TabsTrigger value="pending">Pendientes</TabsTrigger>
-            <TabsTrigger value="approved">Aprobados</TabsTrigger>
-            <TabsTrigger value="rejected">Rechazados</TabsTrigger>
-          </TabsList>
+        {/* Actions */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => queryClient.invalidateQueries({ queryKey: ['adminReports'] })}
+          className="gap-2"
+        >
+          <RefreshCw className="w-4 h-4" />
+          Actualizar
+        </Button>
 
-          <TabsContent value={filter} className="space-y-4">
-            {isLoading ? (
-              <Card>
-                <CardContent className="py-6">
-                  <Skeleton className="h-64" />
-                </CardContent>
-              </Card>
-            ) : !reports || reports.length === 0 ? (
-              <Card>
-                <CardContent className="flex flex-col items-center justify-center py-10">
-                  {filter === 'pending' ? (
-                    <FileCheck className="h-12 w-12 text-muted-foreground mb-2" />
-                  ) : (
-                    <AlertCircle className="h-12 w-12 text-muted-foreground mb-2" />
-                  )}
-                  <p className="text-muted-foreground">
-                    No hay reportes {filter === 'pending' ? 'pendientes' : filter === 'approved' ? 'aprobados' : 'rechazados'}
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Reportes {filter === 'pending' ? 'Pendientes' : filter === 'approved' ? 'Aprobados' : 'Rechazados'}</CardTitle>
-                  <CardDescription>
-                    {reports.length} reporte{reports.length !== 1 ? 's' : ''}
-                  </CardDescription>
+        {/* Filter Tabs */}
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-gaming">
+          {filters.map((f) => (
+            <button
+              key={f.value}
+              onClick={() => setFilter(f.value)}
+              className={cn(
+                'px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all touch-target',
+                filter === f.value
+                  ? 'bg-gradient-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
+              )}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Reports List */}
+        {isLoading ? (
+          <div className="space-y-3">
+            <Skeleton className="h-32" />
+            <Skeleton className="h-32" />
+          </div>
+        ) : !reports || reports.length === 0 ? (
+          <Card className="border-dashed">
+            <CardContent className="flex flex-col items-center justify-center py-10">
+              {filter === 'pending' ? (
+                <FileCheck className="w-10 h-10 text-muted-foreground mb-3" />
+              ) : (
+                <AlertCircle className="w-10 h-10 text-muted-foreground mb-3" />
+              )}
+              <p className="text-muted-foreground text-center">
+                No hay reportes {filter === 'pending' ? 'pendientes' : filter === 'approved' ? 'aprobados' : 'rechazados'}
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-3">
+            {reports.map((report) => (
+              <Card key={report.id} className="overflow-hidden">
+                <CardHeader className="pb-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <CardTitle className="text-base truncate">{report.round}</CardTitle>
+                      <CardDescription className="truncate">{report.eventName}</CardDescription>
+                    </div>
+                    <Badge variant="outline" className="shrink-0">
+                      {report.scoreP1} - {report.scoreP2}
+                    </Badge>
+                  </div>
                 </CardHeader>
-                <CardContent>
-                  {/* Mobile: cards */}
-                  <div className="space-y-3 md:hidden">
-                    {reports.map((report) => (
-                      <Card key={report.id}>
-                        <CardHeader className="space-y-2">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <CardTitle className="text-base truncate">{report.round}</CardTitle>
-                              <CardDescription className="truncate">{report.eventName}</CardDescription>
-                            </div>
-                            <Badge variant="outline" className="shrink-0">
-                              {report.scoreP1} - {report.scoreP2}
-                            </Badge>
-                          </div>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
-                          <div className="text-sm">
-                            <div className="text-muted-foreground">Jugadores</div>
-                            <div className="font-medium truncate">{report.p1.name} vs {report.p2.name}</div>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-3 text-sm">
-                            <div>
-                              <div className="text-muted-foreground">Enviado por</div>
-                              <div className="font-medium truncate">{report.submittedBy}</div>
-                            </div>
-                            <div className="text-right">
-                              <div className="text-muted-foreground">Fecha</div>
-                              <div className="font-medium">
-                                {new Date(report.createdAt).toLocaleDateString('es-ES', {
-                                  day: '2-digit',
-                                  month: '2-digit',
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                })}
-                              </div>
-                            </div>
-                          </div>
-
-                          <Button
-                            size="sm"
-                            variant={filter === 'pending' ? 'default' : 'outline'}
-                            onClick={() => navigate(`/admin/reports/${report.id}`)}
-                            className="w-full"
-                          >
-                            Ver Detalle
-                          </Button>
-                        </CardContent>
-                      </Card>
-                    ))}
+                <CardContent className="space-y-3">
+                  <div className="text-sm">
+                    <p className="text-muted-foreground text-xs">Jugadores</p>
+                    <p className="font-medium truncate">{report.p1.name} vs {report.p2.name}</p>
                   </div>
 
-                  {/* Desktop: table */}
-                  <div className="hidden md:block">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Evento</TableHead>
-                          <TableHead>Ronda</TableHead>
-                          <TableHead>Jugadores</TableHead>
-                          <TableHead>Marcador</TableHead>
-                          <TableHead>Enviado por</TableHead>
-                          <TableHead>Fecha</TableHead>
-                          <TableHead className="text-right">Acción</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {reports.map((report) => (
-                          <TableRow key={report.id}>
-                            <TableCell className="font-medium">{report.eventName}</TableCell>
-                            <TableCell>{report.round}</TableCell>
-                            <TableCell>
-                              {report.p1.name} vs {report.p2.name}
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant="outline">
-                                {report.scoreP1} - {report.scoreP2}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>{report.submittedBy}</TableCell>
-                            <TableCell>
-                              {new Date(report.createdAt).toLocaleDateString('es-ES', {
-                                day: '2-digit',
-                                month: '2-digit',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Button
-                                size="sm"
-                                variant={filter === 'pending' ? 'default' : 'outline'}
-                                onClick={() => navigate(`/admin/reports/${report.id}`)}
-                              >
-                                Ver Detalle
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <p className="text-muted-foreground">Enviado por</p>
+                      <p className="font-medium truncate">{report.submittedBy}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-muted-foreground">Fecha</p>
+                      <p className="font-medium">
+                        {new Date(report.createdAt).toLocaleDateString('es-ES', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </p>
+                    </div>
                   </div>
+
+                  <Button
+                    onClick={() => navigate(`/admin/reports/${report.id}`)}
+                    className={cn('w-full', filter === 'pending' ? '' : 'bg-muted text-foreground hover:bg-muted/80')}
+                    variant={filter === 'pending' ? 'default' : 'outline'}
+                  >
+                    {filter === 'pending' ? 'Revisar' : 'Ver Detalle'}
+                  </Button>
                 </CardContent>
               </Card>
-            )}
-          </TabsContent>
-        </Tabs>
+            ))}
+          </div>
+        )}
       </div>
     </AppLayout>
   );
