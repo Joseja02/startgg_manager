@@ -1,5 +1,5 @@
 version: 1.0
-runtime: php81
+runtime: php82
 build:
   commands:
     pre-build:
