@@ -40,7 +40,7 @@ export default function Login() {
       title: 'Iniciando sesión...',
       description: 'Redirigiendo a start.gg',
     });
-    const base = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+    const base = import.meta.env.VITE_API_BASE_URL;
     window.location.href = `${base}/auth/login`;
   };
 

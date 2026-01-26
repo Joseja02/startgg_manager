@@ -1,10 +1,10 @@
 import axios from 'axios';
 import type { User, EventSummary, SetSummary, SetDetail, ReportSummary, ReportDetail, GameRecord } from '@/types';
 
-const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const baseURL = import.meta.env.VITE_API_BASE_URL;
 
 const api = axios.create({
-  baseURL: `${baseURL}/api`,
+  baseURL: baseURL ? `${baseURL}/api` : '/api',
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
@@ -31,7 +31,7 @@ export const authApi = {
     } as User
   })),
   login: () => {
-    const base = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+    const base = import.meta.env.VITE_API_BASE_URL;
     window.location.href = `${base}/auth/login`;
   },
 };
