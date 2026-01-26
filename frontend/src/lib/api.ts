@@ -5,6 +5,7 @@ const baseURL = import.meta.env.VITE_API_BASE_URL;
 
 const api = axios.create({
   baseURL: baseURL ? `${baseURL}/api` : '/api',
+  withCredentials: true, // CRÍTICO para enviar cookies en requests CORS
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
