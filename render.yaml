@@ -1,12 +1,10 @@
 services:
   - type: web
     name: startgg-manager-backend
-    runtime: php
+    env: docker
     plan: free
-    buildCommand: |
-      composer install --no-dev --optimize-autoloader --no-interaction
-      chmod -R 755 storage bootstrap/cache
-    startCommand: php artisan serve --host=0.0.0.0 --port=$PORT
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
     envVars:
       - key: APP_ENV
         value: production
