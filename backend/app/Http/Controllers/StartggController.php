@@ -14,6 +14,16 @@ use Carbon\Carbon;
 
 class StartggController extends Controller
 {
+    /**
+     * Construye la URL completa del frontend (origen + path base)
+     */
+    private function getFrontendUrl(): string
+    {
+        $origin = env('FRONTEND_URL', 'https://startgg-manager-frontend-production.up.railway.app:8080');
+        $basePath = env('FRONTEND_BASE_PATH', '');
+        return rtrim($origin, '/') . $basePath;
+    }
+
     public function login(Request $request)
     {
         $state = Str::random(32);
@@ -47,7 +57,7 @@ class StartggController extends Controller
         $stateFromCookie = $request->cookie('oauth_state_cookie');
         $state = $stateFromSession ?? $stateFromCookie;
         
-        $frontendUrl = env('FRONTEND_URL', 'https://startgg-manager-frontend-production.up.railway.app:8080');
+        $frontendUrl = $this->getFrontendUrl();
 
         Log::info('oauth callback received', [
             'state_from_session_exists' => (bool) $stateFromSession,
@@ -173,7 +183,7 @@ class StartggController extends Controller
         $apiToken = $user->createToken('web-app')->plainTextToken;
 
         // Redirigir al frontend con el token
-        $frontendUrl = env('FRONTEND_URL', 'https://startgg-manager-frontend-production.up.railway.app:8080');
+        $frontendUrl = $this->getFrontendUrl();
         
         return redirect()->away(rtrim($frontendUrl, '/') . '/auth/callback?token=' . $apiToken);
     }
