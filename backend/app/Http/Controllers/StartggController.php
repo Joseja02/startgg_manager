@@ -87,11 +87,6 @@ class StartggController extends Controller
         // Documentación: https://developer.start.gg/docs/oauth/oauth-overview
         $tokenUrl = config('startgg.oauth_token_url');
         
-        Log::info('startgg token exchange', [
-            'token_url' => $tokenUrl,
-            'redirect_uri' => config('startgg.redirect_uri'),
-        ]);
-        
         $tokenResponse = Http::asForm()->post($tokenUrl, [
             'grant_type' => 'authorization_code',
             'client_id' => config('startgg.client_id'),
@@ -112,14 +107,6 @@ class StartggController extends Controller
         $accessToken = $tokenData['access_token'] ?? null;
         $refreshToken = $tokenData['refresh_token'] ?? null;
         $expiresIn = $tokenData['expires_in'] ?? null;
-
-        // Log token data (sin exponer el token completo)
-        Log::info('startgg token received', [
-            'has_access_token' => (bool) $accessToken,
-            'has_refresh_token' => (bool) $refreshToken,
-            'expires_in' => $expiresIn,
-            'token_length' => $accessToken ? strlen($accessToken) : 0,
-        ]);
 
         if (!$accessToken) {
             Log::error('startgg no access token', ['response' => $tokenData]);
@@ -142,12 +129,6 @@ class StartggController extends Controller
         GQL;
 
         $graphqlEndpoint = config('startgg.api_url_oauth');
-        
-        Log::info('startgg graphql request', [
-            'endpoint' => $graphqlEndpoint,
-            'has_token' => (bool) $accessToken,
-            'token_preview' => $accessToken ? substr($accessToken, 0, 10) . '...' : null,
-        ]);
 
         $graphqlResponse = Http::withToken($accessToken)
             ->acceptJson()
