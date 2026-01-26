@@ -55,9 +55,14 @@ RUN echo '<VirtualHost *:${PORT}>\n\
     CustomLog ${APACHE_LOG_DIR}/access.log combined\n\
 </VirtualHost>' > /etc/apache2/sites-available/000-default.conf
 
-# Script para configurar el puerto dinámicamente
+# Script para configurar el puerto, ejecutar migraciones e iniciar Apache
 RUN echo '#!/bin/bash\n\
+set -e\n\
+echo "Configurando puerto..."\n\
 sed -i "s/Listen 80/Listen $PORT/g" /etc/apache2/ports.conf\n\
+echo "Ejecutando migraciones..."\n\
+php artisan migrate --force\n\
+echo "Iniciando Apache..."\n\
 exec apache2-foreground' > /start.sh && chmod +x /start.sh
 
 # Expone el puerto
