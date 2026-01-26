@@ -106,6 +106,14 @@ class StartggController extends Controller
         $refreshToken = $tokenData['refresh_token'] ?? null;
         $expiresIn = $tokenData['expires_in'] ?? null;
 
+        // Log token data (sin exponer el token completo)
+        Log::info('startgg token received', [
+            'has_access_token' => (bool) $accessToken,
+            'has_refresh_token' => (bool) $refreshToken,
+            'expires_in' => $expiresIn,
+            'token_length' => $accessToken ? strlen($accessToken) : 0,
+        ]);
+
         if (!$accessToken) {
             Log::error('startgg no access token', ['response' => $tokenData]);
             return response()->json(['error' => 'No access token received'], 500);
@@ -126,9 +134,17 @@ class StartggController extends Controller
         }
         GQL;
 
+        $graphqlEndpoint = config('startgg.api_url_oauth');
+        
+        Log::info('startgg graphql request', [
+            'endpoint' => $graphqlEndpoint,
+            'has_token' => (bool) $accessToken,
+            'token_preview' => $accessToken ? substr($accessToken, 0, 10) . '...' : null,
+        ]);
+
         $graphqlResponse = Http::withToken($accessToken)
             ->acceptJson()
-            ->post(config('startgg.api_url_oauth'), [
+            ->post($graphqlEndpoint, [
                 'query' => $userQuery,
             ]);
 
@@ -136,8 +152,10 @@ class StartggController extends Controller
             Log::error('startgg graphql user error', [
                 'status' => $graphqlResponse->status(),
                 'body' => $graphqlResponse->body(),
+                'headers' => $graphqlResponse->headers(),
+                'endpoint' => $graphqlEndpoint,
             ]);
-            return response()->json(['error' => 'Failed to fetch user'], 500);
+            return redirect()->away(rtrim($frontendUrl, '/') . '/auth/callback?error=graphql_failed');
         }
 
         $userData = data_get($graphqlResponse->json(), 'data.currentUser');

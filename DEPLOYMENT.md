@@ -71,13 +71,21 @@ En el dashboard del servicio web, ve a **Environment** y agrega:
 APP_URL=https://tu-backend.onrender.com
 FRONTEND_URL=https://tu-usuario.github.io/StartGG-Manager
 
+# Start.gg OAuth
 STARTGG_CLIENT_ID=tu_client_id
 STARTGG_CLIENT_SECRET=tu_client_secret
 STARTGG_REDIRECT_URI=https://tu-backend.onrender.com/auth/callback
 STARTGG_API_URL=https://api.start.gg/gql/alpha
 STARTGG_API_URL_OAUTH=https://api.start.gg/oauth/authorize
 
-SESSION_DOMAIN=.onrender.com
+# Session (IMPORTANTE para OAuth cross-site)
+SESSION_DRIVER=database
+SESSION_DOMAIN=
+SESSION_SECURE_COOKIE=true
+SESSION_SAME_SITE=none
+SESSION_HTTP_ONLY=true
+
+# Sanctum
 SANCTUM_STATEFUL_DOMAINS=tu-usuario.github.io
 ```
 
@@ -184,6 +192,16 @@ Dashboard → Tu servicio → Logs
 ### Error de base de datos
 - Verifica que las migraciones se hayan ejecutado
 - Comprueba la conexión a PostgreSQL en los logs
+
+### Error "invalid_state" en OAuth
+- Este error ocurre cuando las cookies de sesión no persisten entre el login y el callback
+- **Solución**: Asegúrate de que estas variables estén configuradas en Render:
+  - `SESSION_DRIVER=database`
+  - `SESSION_DOMAIN=` (vacío, sin valor)
+  - `SESSION_SECURE_COOKIE=true`
+  - `SESSION_SAME_SITE=none`
+  - `SESSION_HTTP_ONLY=true`
+- Verifica que hayas ejecutado las migraciones (tabla `sessions` debe existir)
 
 ---
 
