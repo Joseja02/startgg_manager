@@ -98,16 +98,24 @@ class SetController extends Controller
             // Invalidar caches relacionados para reflejar el nuevo estado
             $eventId = $setDetail['eventId'] ?? null;
             if ($eventId) {
-                $cacheKeys = [
-                    "event_{$eventId}_sets_user_{$user->id}",
-                    "event_{$eventId}_sets_user_{$user->id}_status_in_progress",
-                    "event_{$eventId}_sets_all",
-                    "event_{$eventId}_sets_all_status_in_progress",
-                    "set_detail_{$setId}",
-                ];
+                // Limpiar todos los posibles caches de este evento
+                $statusFilters = ['', '_status_not_started', '_status_in_progress', '_status_completed'];
+                $cacheKeys = ["set_detail_{$setId}"];
+                
+                foreach ($statusFilters as $status) {
+                    $cacheKeys[] = "event_{$eventId}_sets_user_{$user->id}{$status}";
+                    $cacheKeys[] = "event_{$eventId}_sets_all{$status}";
+                }
+                
                 foreach ($cacheKeys as $key) {
                     Cache::forget($key);
                 }
+                
+                Log::info('Cache invalidated after starting set', [
+                    'set_id' => $setId,
+                    'event_id' => $eventId,
+                    'cache_keys' => $cacheKeys,
+                ]);
             }
 
             return response()->json([

@@ -367,7 +367,7 @@ class StartggClient
     public function getEventSets(User $user, $eventId, array $filters = []): array
     {
         $query = <<<'GQL'
-        query EventSets($eventId: ID!, $page: Int, $perPage: Int) {
+        query EventSets($eventId: ID!, $page: Int, $perPage: Int, $filters: SetFilters) {
           event(id: $eventId) {
             id
             name
@@ -378,6 +378,7 @@ class StartggClient
                 page: $page
                 perPage: $perPage
                 sortType: STANDARD
+                filters: $filters
               ) {
                 pageInfo {
                   total
@@ -414,6 +415,10 @@ class StartggClient
             'eventId' => $eventId,
             'page' => 1,
             'perPage' => 50,
+            'filters' => [
+                // Incluir solo sets no empezados y en progreso (excluir completados)
+                'state' => [1, 2], // 1=not_started, 2=in_progress
+            ],
         ]);
 
         $phases = data_get($data, 'event.phases', []);
