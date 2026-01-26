@@ -85,7 +85,14 @@ class StartggController extends Controller
 
         // Intercambiar authorization code por access token
         // Documentación: https://developer.start.gg/docs/oauth/oauth-overview
-        $tokenResponse = Http::asForm()->post('https://api.start.gg/oauth/access_token', [
+        $tokenUrl = config('startgg.oauth_token_url');
+        
+        Log::info('startgg token exchange', [
+            'token_url' => $tokenUrl,
+            'redirect_uri' => config('startgg.redirect_uri'),
+        ]);
+        
+        $tokenResponse = Http::asForm()->post($tokenUrl, [
             'grant_type' => 'authorization_code',
             'client_id' => config('startgg.client_id'),
             'client_secret' => config('startgg.client_secret'),
