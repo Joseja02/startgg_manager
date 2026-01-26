@@ -20,7 +20,7 @@ return new class extends Migration
             // Datos del evento y set de start.gg
             $table->bigInteger('event_id')->comment('ID del evento en start.gg');
             $table->string('event_name');
-            $table->bigInteger('set_id')->comment('ID del set en start.gg');
+            $table->string('set_id')->comment('ID del set en start.gg (puede ser bigint o string con preview_)');
             $table->string('round'); // Winners Round 1, Losers Finals, etc.
             $table->integer('best_of')->default(3);
             

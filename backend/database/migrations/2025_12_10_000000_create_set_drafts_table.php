@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('set_drafts', function (Blueprint $table) {
             $table->id();
-            $table->bigInteger('set_id')->index()->comment('ID del set en start.gg');
+            $table->string('set_id')->index()->comment('ID del set en start.gg (puede ser bigint o string con preview_)');
             $table->foreignId('user_id')->nullable()->constrained()->onDelete('cascade');
             $table->json('data')->nullable()->comment('JSON con estado parcial: games, personajes, stocks, otros');
             $table->enum('status', ['draft','submitted'])->default('draft');
