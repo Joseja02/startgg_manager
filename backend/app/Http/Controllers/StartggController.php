@@ -1,0 +1,190 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cookie;
+use Illuminate\Support\Str;
+use App\Models\User;
+use Illuminate\Support\Facades\Auth;
+use Carbon\Carbon;
+
+class StartggController extends Controller
+{
+    /**
+     * Construye la URL completa del frontend (origen + path base)
+     */
+    private function getFrontendUrl(): string
+    {
+        $origin = env('FRONTEND_URL', 'https://startgg-manager-frontend-production.up.railway.app:8080');
+        $basePath = env('FRONTEND_BASE_PATH', '');
+        return rtrim($origin, '/') . $basePath;
+    }
+
+    public function login(Request $request)
+    {
+        $state = Str::random(32);
+        // Store state in session (primary) and also as a signed cookie (fallback/redundant)
+        $request->session()->put('oauth_state', $state);
+        // Also store in a dedicated cookie to bypass session storage issues
+        Cookie::queue(Cookie::make('oauth_state_cookie', $state, 30, '/', null, true, true, false, 'None'));
+
+        Log::info('oauth login initiated', [
+            'state' => $state,
+            'session_id' => $request->session()->getId(),
+        ]);
+
+        $params = http_build_query([
+            'client_id' => config('startgg.client_id'),
+            'redirect_uri' => config('startgg.redirect_uri'),
+            'response_type' => 'code',
+            // Añadimos el scope necesario para reportar/gestionar sets
+            'scope' => 'user.identity user.email tournament.reporter',
+            'state' => $state,
+        ]);
+
+        $authorizeUrl = rtrim(config('startgg.oauth_authorize_url'), '?') . '?' . $params;
+        return redirect()->away($authorizeUrl);
+    }
+
+    public function callback(Request $request)
+    {
+        // Try to get state from session first (primary), then fallback to cookie (redundant for diagnosis)
+        $stateFromSession = $request->session()->pull('oauth_state');
+        $stateFromCookie = $request->cookie('oauth_state_cookie');
+        $state = $stateFromSession ?? $stateFromCookie;
+        
+        $frontendUrl = $this->getFrontendUrl();
+
+        Log::info('oauth callback received', [
+            'state_from_session_exists' => (bool) $stateFromSession,
+            'state_from_cookie_exists' => (bool) $stateFromCookie,
+            'received_state' => $request->query('state'),
+            'session_id' => $request->session()->getId(),
+            'session_cookie' => $request->cookie(config('session.cookie')),
+        ]);
+
+        if (!$state || $state !== $request->query('state')) {
+            // Log useful debugging info without exposing sensitive tokens
+            Log::warning('oauth callback state mismatch', [
+                'expected_state_exists' => (bool) $state,
+                'expected_state_from_session' => (bool) $stateFromSession,
+                'expected_state_from_cookie' => (bool) $stateFromCookie,
+                'received_state' => $request->query('state'),
+                'session_id' => $request->session()->getId(),
+                'session_cookie' => $request->cookie(config('session.cookie')),
+            ]);
+
+            // Redirect to frontend with an error query param for better UX
+            return redirect()->away(rtrim($frontendUrl, '/') . '/auth/callback?error=invalid_state');
+        }
+
+        $code = $request->query('code');
+        if (!$code) {
+            Log::warning('oauth callback missing code', [
+                'session_id' => $request->session()->getId(),
+                'session_cookie' => $request->cookie(config('session.cookie')),
+                'query' => $request->query(),
+            ]);
+
+            return redirect()->away(rtrim($frontendUrl, '/') . '/auth/callback?error=missing_code');
+        }
+
+        // Intercambiar authorization code por access token
+        // Documentación: https://developer.start.gg/docs/oauth/oauth-overview
+        $tokenUrl = config('startgg.oauth_token_url');
+        
+        $tokenResponse = Http::asForm()->post($tokenUrl, [
+            'grant_type' => 'authorization_code',
+            'client_id' => config('startgg.client_id'),
+            'client_secret' => config('startgg.client_secret'),
+            'code' => $code,
+            'redirect_uri' => config('startgg.redirect_uri'),
+        ]);
+
+        if ($tokenResponse->failed()) {
+            Log::error('startgg token error', [
+                'status' => $tokenResponse->status(),
+                'body' => $tokenResponse->body(),
+            ]);
+            return redirect()->away(rtrim($frontendUrl, '/') . '/auth/callback?error=token_exchange_failed');
+        }
+
+        $tokenData = $tokenResponse->json();
+        $accessToken = $tokenData['access_token'] ?? null;
+        $refreshToken = $tokenData['refresh_token'] ?? null;
+        $expiresIn = $tokenData['expires_in'] ?? null;
+
+        if (!$accessToken) {
+            Log::error('startgg no access token', ['response' => $tokenData]);
+            return response()->json(['error' => 'No access token received'], 500);
+        }
+
+        // Obtener usuario actual de start.gg via GraphQL
+        $userQuery = <<<'GQL'
+        query {
+          currentUser {
+            id
+            email
+            player {
+              id
+              gamerTag
+              prefix
+            }
+          }
+        }
+        GQL;
+
+        $graphqlEndpoint = config('startgg.api_url_oauth');
+
+        $graphqlResponse = Http::withToken($accessToken)
+            ->acceptJson()
+            ->post($graphqlEndpoint, [
+                'query' => $userQuery,
+            ]);
+
+        if ($graphqlResponse->failed()) {
+            Log::error('startgg graphql user error', [
+                'status' => $graphqlResponse->status(),
+                'body' => $graphqlResponse->body(),
+                'headers' => $graphqlResponse->headers(),
+                'endpoint' => $graphqlEndpoint,
+            ]);
+            return redirect()->away(rtrim($frontendUrl, '/') . '/auth/callback?error=graphql_failed');
+        }
+
+        $userData = data_get($graphqlResponse->json(), 'data.currentUser');
+
+        // Persistir/actualizar usuario local con tokens de start.gg
+        $startggUserId = data_get($userData, 'id');
+        $email = data_get($userData, 'email');
+        $gamerTag = data_get($userData, 'player.gamerTag');
+
+        $existingUser = User::where('startgg_user_id', (string) $startggUserId)->first();
+        $role = $existingUser?->role ?? 'competitor';
+
+        $user = User::query()->updateOrCreate(
+            ['startgg_user_id' => (string) $startggUserId],
+            [
+                'name' => $gamerTag ?: ('user_'.$startggUserId),
+                'email' => $email ?: ('user_'.$startggUserId.'@startgg.local'),
+                'password' => bcrypt(Str::random(32)), // Password aleatorio (no se usará, solo OAuth)
+                'startgg_access_token' => $accessToken,
+                'startgg_refresh_token' => $refreshToken,
+                'token_expires_at' => $expiresIn ? Carbon::now()->addSeconds((int) $expiresIn) : null,
+                'role' => $role,
+            ]
+        );
+
+        // Crear token de API para el frontend
+        $apiToken = $user->createToken('web-app')->plainTextToken;
+
+        // Redirigir al frontend con el token
+        $frontendUrl = $this->getFrontendUrl();
+        
+        return redirect()->away(rtrim($frontendUrl, '/') . '/auth/callback?token=' . $apiToken);
+    }
+}

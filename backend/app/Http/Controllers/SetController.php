@@ -1,0 +1,615 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Validator;
+use App\Services\StartggClient;
+use App\Models\Report;
+use App\Models\Game;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use App\Models\SetState;
+use App\Models\SetDraft;
+use Illuminate\Support\Facades\Cache;
+
+class SetController extends Controller
+{
+    public function __construct(private StartggClient $client) {}
+
+    /**
+     * Obtener detalles de un set
+     * GET /api/sets/{setId}
+     */
+    public function show(Request $request, $setId)
+    {
+        $user = Auth::user();
+        
+        try {
+            $setDetail = $this->client->getSetDetail($user, $setId);
+
+            // Adjuntar reporte existente (pendiente/aprobado/rechazado) para bloquear reprocesos
+            $existingReport = Report::with(['games', 'user'])
+                ->where('set_id', $setId)
+                ->latest()
+                ->first();
+
+            if ($existingReport) {
+                $setDetail['status'] = match ($existingReport->status) {
+                    'pending' => 'reported',
+                    'approved' => 'approved',
+                    'rejected' => 'rejected',
+                    default => $setDetail['status'],
+                };
+
+                $setDetail['existingReport'] = [
+                    'id' => $existingReport->id,
+                    'status' => $existingReport->status,
+                    'scoreP1' => $existingReport->score_p1,
+                    'scoreP2' => $existingReport->score_p2,
+                    'notes' => $existingReport->notes,
+                    'rejectionReason' => $existingReport->rejection_reason,
+                    'submittedBy' => $existingReport->user?->name,
+                    'createdAt' => $existingReport->created_at?->toIso8601String(),
+                    'games' => $existingReport->games->map(function ($game) {
+                        return [
+                            'index' => $game->game_index,
+                            'stage' => $game->stage,
+                            'winner' => $game->winner,
+                            'stocksP1' => $game->stocks_p1,
+                            'stocksP2' => $game->stocks_p2,
+                            'characterP1' => $game->character_p1,
+                            'characterP2' => $game->character_p2,
+                        ];
+                    })->values()->all(),
+                ];
+            }
+            
+            return response()->json($setDetail);
+        } catch (\Throwable $e) {
+            Log::error('Error fetching set detail', [
+                'set_id' => $setId,
+                'error' => $e->getMessage(),
+            ]);
+            
+            return response()->json([
+                'error' => 'Failed to fetch set detail',
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Marcar un set como iniciado
+     * POST /api/sets/{setId}/start
+     */
+    public function start(Request $request, $setId)
+    {
+        $user = Auth::user();
+        
+        try {
+            // Verificar que el usuario sea admin del torneo
+            $setDetail = $this->client->getSetDetail($user, $setId);
+
+            // Marcar el set como en progreso en start.gg
+            $result = $this->client->markSetInProgress($user, $setId);
+
+            // Invalidar caches relacionados para reflejar el nuevo estado
+            $eventId = $setDetail['eventId'] ?? null;
+            if ($eventId) {
+                // Limpiar todos los posibles caches de este evento
+                $statusFilters = ['', '_status_not_started', '_status_in_progress', '_status_completed'];
+                $cacheKeys = ["set_detail_{$setId}"];
+                
+                foreach ($statusFilters as $status) {
+                    $cacheKeys[] = "event_{$eventId}_sets_user_{$user->id}{$status}";
+                    $cacheKeys[] = "event_{$eventId}_sets_all{$status}";
+                }
+                
+                foreach ($cacheKeys as $key) {
+                    Cache::forget($key);
+                }
+                
+                Log::info('Cache invalidated after starting set', [
+                    'set_id' => $setId,
+                    'event_id' => $eventId,
+                    'cache_keys' => $cacheKeys,
+                ]);
+            }
+
+            return response()->json([
+                'message' => 'Set marked as in progress',
+                'set' => $result,
+            ]);
+
+        } catch (\RuntimeException $e) {
+            // Errores esperados desde StartggClient (p.ej. scopes faltantes)
+            $msg = $e->getMessage();
+
+            Log::warning('Runtime error starting set', [
+                'set_id' => $setId,
+                'user_id' => $user->id,
+                'error' => $msg,
+            ]);
+
+            // Detectar caso de scopes faltantes
+            if (str_contains(strtolower($msg), 'scope') || str_contains(strtolower($msg), 'tournament.reporter') || str_contains(strtolower($msg), 'missing the following scopes')) {
+                $reauthUrl = rtrim(config('app.url', env('APP_URL', 'http://localhost:8000')), '/') . '/auth/login';
+                return response()->json([
+                    'error' => 'Insufficient scopes',
+                    'message' => $msg,
+                    'action' => 'reauthenticate',
+                    'reauth_url' => $reauthUrl,
+                    'note' => 'Authenticate again to grant the tournament.reporter scope',
+                ], 403);
+            }
+
+            return response()->json([
+                'error' => 'Failed to start set',
+                'message' => $msg,
+            ], 500);
+
+        } catch (\Throwable $e) {
+            Log::error('Error starting set', [
+                'set_id' => $setId,
+                'user_id' => $user->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'error' => 'Failed to start set',
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Enviar reporte de un set
+     * POST /api/sets/{setId}/submit
+     */
+    public function submit(Request $request, $setId)
+    {
+        $user = Auth::user();
+        
+        $validator = Validator::make($request->all(), [
+            'games' => 'required|array|min:1',
+            'games.*.index' => 'required|integer|min:1',
+            'games.*.stage' => 'required|string',
+            'games.*.winner' => 'required|in:p1,p2',
+            'games.*.stocksP1' => 'required|integer|min:0|max:3',
+            'games.*.stocksP2' => 'required|integer|min:0|max:3',
+            'games.*.characterP1' => 'nullable|string',
+            'games.*.characterP2' => 'nullable|string',
+            'notes' => 'nullable|string|max:1000',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'error' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        try {
+            // Evitar reportes duplicados pendientes para el mismo set
+            $pending = Report::where('set_id', $setId)->where('status', 'pending')->first();
+            if ($pending) {
+                return response()->json([
+                    'error' => 'Report already pending',
+                    'message' => 'Ya existe un reporte pendiente para este set',
+                    'report_id' => $pending->id,
+                ], 409);
+            }
+
+            // Obtener información del set desde start.gg
+            $setDetail = $this->client->getSetDetail($user, $setId);
+            
+            // Validar que el usuario es uno de los participantes del set (userId o participant/entrant)
+            $userStartggId = (string) $user->startgg_user_id;
+            $p1Ids = array_filter([
+                isset($setDetail['p1']['userId']) ? (string) $setDetail['p1']['userId'] : null,
+                isset($setDetail['p1']['participantId']) ? (string) $setDetail['p1']['participantId'] : null,
+                isset($setDetail['p1']['entrantId']) ? (string) $setDetail['p1']['entrantId'] : null,
+            ]);
+            $p2Ids = array_filter([
+                isset($setDetail['p2']['userId']) ? (string) $setDetail['p2']['userId'] : null,
+                isset($setDetail['p2']['participantId']) ? (string) $setDetail['p2']['participantId'] : null,
+                isset($setDetail['p2']['entrantId']) ? (string) $setDetail['p2']['entrantId'] : null,
+            ]);
+
+            $isParticipant = in_array($userStartggId, $p1Ids, true) || in_array($userStartggId, $p2Ids, true);
+
+            if (!$isParticipant) {
+                Log::warning('User attempted to submit report for set they do not participate in', [
+                    'user_id' => $user->id,
+                    'user_startgg_id' => $userStartggId,
+                    'set_id' => $setId,
+                    'p1_ids' => $p1Ids,
+                    'p2_ids' => $p2Ids,
+                ]);
+                
+                return response()->json([
+                    'error' => 'Unauthorized',
+                    'message' => 'You can only submit reports for sets you participate in',
+                ], 403);
+            }
+            
+            // Validar games según reglas SBS
+            $games = $request->input('games');
+            $validationErrors = $this->validateGames($games, $setDetail['bestOf'] ?? 3);
+            
+            if (!empty($validationErrors)) {
+                return response()->json([
+                    'error' => 'Game validation failed',
+                    'errors' => $validationErrors,
+                ], 422);
+            }
+
+            // Calcular scores
+            $scoreP1 = 0;
+            $scoreP2 = 0;
+            foreach ($games as $game) {
+                if ($game['winner'] === 'p1') $scoreP1++;
+                if ($game['winner'] === 'p2') $scoreP2++;
+            }
+
+            // Crear reporte en base de datos
+            DB::beginTransaction();
+            
+            $report = Report::create([
+                'user_id' => $user->id,
+                'event_id' => $setDetail['eventId'],
+                'event_name' => $setDetail['eventName'] ?? 'Unknown Event',
+                'set_id' => $setId,
+                'round' => $setDetail['round'],
+                'best_of' => $setDetail['bestOf'] ?? 3,
+                'p1_entrant_id' => $setDetail['p1']['entrantId'],
+                'p1_name' => $setDetail['p1']['name'],
+                'p2_entrant_id' => $setDetail['p2']['entrantId'],
+                'p2_name' => $setDetail['p2']['name'],
+                'score_p1' => $scoreP1,
+                'score_p2' => $scoreP2,
+                'status' => 'pending',
+                'notes' => $request->input('notes'),
+            ]);
+
+            // Crear games asociados
+            foreach ($games as $gameData) {
+                Game::create([
+                    'report_id' => $report->id,
+                    'game_index' => $gameData['index'],
+                    'stage' => $gameData['stage'],
+                    'winner' => $gameData['winner'],
+                    'stocks_p1' => $gameData['stocksP1'],
+                    'stocks_p2' => $gameData['stocksP2'],
+                    'character_p1' => $gameData['characterP1'] ?? null,
+                    'character_p2' => $gameData['characterP2'] ?? null,
+                ]);
+            }
+
+            DB::commit();
+
+            // Limpiar caches de sets para que el dashboard refleje estado reportado
+            $cacheKeys = [
+                "event_{$setDetail['eventId']}_sets_user_{$user->id}",
+                "event_{$setDetail['eventId']}_sets_user_{$user->id}_status_in_progress",
+                "event_{$setDetail['eventId']}_sets_user_{$user->id}_status_reported",
+                "event_{$setDetail['eventId']}_sets_all",
+                "event_{$setDetail['eventId']}_sets_all_status_in_progress",
+                "event_{$setDetail['eventId']}_sets_all_status_reported",
+            ];
+            foreach ($cacheKeys as $key) {
+                Cache::forget($key);
+            }
+
+            return response()->json([
+                'message' => 'Report submitted successfully',
+                'report' => $report->load('games'),
+            ], 201);
+            
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            
+            Log::error('Error submitting set report', [
+                'set_id' => $setId,
+                'user_id' => $user->id,
+                'error' => $e->getMessage(),
+            ]);
+            
+            return response()->json([
+                'error' => 'Failed to submit report',
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Obtener estado sincronizado del set (RPS, bans, final_stage)
+     * GET /api/sets/{setId}/state
+     */
+    public function state(Request $request, $setId)
+    {
+        $user = Auth::user();
+
+        try {
+            $state = SetState::firstOrCreate(
+                ['set_id' => $setId],
+                ['bans' => [], 'phase' => 'rps']
+            );
+
+            return response()->json($state);
+        } catch (\Illuminate\Database\QueryException $ex) {
+            Log::error('DB error fetching set state', ['set_id' => $setId, 'error' => $ex->getMessage()]);
+            return response()->json([
+                'error' => 'Error de base de datos',
+                'message' => 'La tabla de estados del set no existe. Ejecuta las migraciones: php artisan migrate',
+            ], 500);
+        }
+    }
+
+    /**
+     * Registrar elección de RPS por el jugador
+     * POST /api/sets/{setId}/rps
+     * body: { choice: 'rock'|'paper'|'scissors' }
+     */
+    public function rps(Request $request, $setId)
+    {
+        $user = Auth::user();
+
+        $data = $request->validate([
+            'choice' => 'required|string',
+        ]);
+
+        // Obtener set detail para saber quién es p1/p2
+        $setDetail = $this->client->getSetDetail($user, $setId);
+
+        try {
+            $state = SetState::firstOrCreate(
+                ['set_id' => $setId],
+                ['bans' => [], 'phase' => 'rps']
+            );
+        } catch (\Illuminate\Database\QueryException $ex) {
+            Log::error('DB error saving rps choice', ['set_id' => $setId, 'error' => $ex->getMessage()]);
+            return response()->json([
+                'error' => 'Error de base de datos',
+                'message' => 'La tabla de estados del set no existe. Ejecuta las migraciones: php artisan migrate',
+            ], 500);
+        }
+
+        // Determine if user is p1 or p2 by startgg user id
+        $startggId = $user->startgg_user_id ?? null;
+        $role = null;
+        if ($startggId && isset($setDetail['p1']) && (string)$startggId === (string)$setDetail['p1']['userId']) {
+            $role = 'p1';
+        } elseif ($startggId && isset($setDetail['p2']) && (string)$startggId === (string)$setDetail['p2']['userId']) {
+            $role = 'p2';
+        }
+
+        if (!$role) {
+            return response()->json(['error' => 'User not a participant of this set'], 403);
+        }
+
+        // Save choice
+        if ($role === 'p1') {
+            $state->p1_choice = $data['choice'];
+        } else {
+            $state->p2_choice = $data['choice'];
+        }
+
+        // If both choices set, move to banning
+        if ($state->p1_choice && $state->p2_choice) {
+            $state->phase = 'banning';
+            $state->bans = $state->bans ?? [];
+        }
+
+        $state->save();
+
+        return response()->json($state);
+    }
+
+    /**
+     * Registrar ban de stage. Se respeta orden: p1 3 bans, p2 4 bans, p1 picks final stage among remaining.
+     * POST /api/sets/{setId}/bans
+     * body: { stage: 'Stage Name' }
+     */
+    public function ban(Request $request, $setId)
+    {
+        $user = Auth::user();
+
+        $data = $request->validate([
+            'stage' => 'required|string',
+        ]);
+
+        $setDetail = $this->client->getSetDetail($user, $setId);
+        try {
+            $state = SetState::firstOrCreate(
+                ['set_id' => $setId],
+                ['bans' => [], 'phase' => 'rps']
+            );
+        } catch (\Illuminate\Database\QueryException $ex) {
+            Log::error('DB error handling ban', ['set_id' => $setId, 'error' => $ex->getMessage()]);
+            return response()->json([
+                'error' => 'Error de base de datos',
+                'message' => 'La tabla de estados del set no existe. Ejecuta las migraciones: php artisan migrate',
+            ], 500);
+        }
+
+        if ($state->phase !== 'banning') {
+            return response()->json(['error' => 'Banning phase not active'], 422);
+        }
+
+        $startggId = $user->startgg_user_id ?? null;
+        $role = null;
+        if ($startggId && isset($setDetail['p1']) && (string)$startggId === (string)$setDetail['p1']['userId']) {
+            $role = 'p1';
+        } elseif ($startggId && isset($setDetail['p2']) && (string)$startggId === (string)$setDetail['p2']['userId']) {
+            $role = 'p2';
+        }
+
+        if (!$role) return response()->json(['error' => 'User not a participant'], 403);
+
+        $bans = $state->bans ?? [];
+
+        // If final_stage already chosen, no further changes
+        if ($state->final_stage) {
+            return response()->json(['error' => 'Final stage already selected'], 422);
+        }
+
+        // Do not allow duplicate bans
+        if (in_array($data['stage'], $bans)) {
+            return response()->json(['error' => 'Stage already banned'], 422);
+        }
+
+        // Determine turn logic: p1 first 3 bans, then p2 4 bans, then p1 picks among remaining
+        $totalBans = count($bans);
+
+        if ($totalBans < 3) {
+            // p1's first 3 bans
+            if ($role !== 'p1') return response()->json(['error' => 'Not your turn to ban'], 403);
+            $bans[] = $data['stage'];
+        } elseif ($totalBans >= 3 && $totalBans < 7) {
+            // p2's 4 bans
+            if ($role !== 'p2') return response()->json(['error' => 'Not your turn to ban'], 403);
+            $bans[] = $data['stage'];
+        } elseif ($totalBans === 7) {
+            // Now p1 picks final stage from remaining
+            // Validate stage is not banned and belongs to remaining
+            $allStages = (array) ($request->input('allStages') ?? []);
+            // if allStages empty, try to use a known list from config
+            $remaining = [];
+            if (!empty($allStages)) {
+                $remaining = array_values(array_diff($allStages, $bans));
+            }
+            if (!empty($remaining) && !in_array($data['stage'], $remaining)) {
+                return response()->json(['error' => 'Stage not available for pick'], 422);
+            }
+
+            if ($role !== 'p1') return response()->json(['error' => 'Not your turn to pick'], 403);
+
+            $state->final_stage = $data['stage'];
+            $state->phase = 'picked';
+            $state->bans = $bans;
+            $state->save();
+
+            return response()->json($state);
+        } else {
+            return response()->json(['error' => 'Invalid ban state'], 422);
+        }
+
+        // Save bans and remain in banning phase
+        $state->bans = $bans;
+        $state->save();
+
+        return response()->json($state);
+    }
+
+    /**
+     * Obtener borrador del set para el usuario
+     * GET /api/sets/{setId}/draft
+     */
+    public function draft(Request $request, $setId)
+    {
+        $user = Auth::user();
+
+        try {
+            $draft = SetDraft::where('set_id', $setId)->where('user_id', $user->id)->first();
+            if (!$draft) {
+                return response()->json(null);
+            }
+            return response()->json($draft);
+        } catch (\Throwable $e) {
+            Log::error('Error fetching set draft', ['set_id' => $setId, 'user_id' => $user->id, 'error' => $e->getMessage()]);
+            return response()->json(['error' => 'No se pudo obtener el borrador'], 500);
+        }
+    }
+
+    /**
+     * Guardar/actualizar borrador del set para el usuario
+     * POST /api/sets/{setId}/draft
+     * body: { data: {...} }
+     */
+    public function saveDraft(Request $request, $setId)
+    {
+        $user = Auth::user();
+
+        $payload = $request->validate([
+            'data' => 'required|array',
+        ]);
+
+        try {
+            $draft = SetDraft::updateOrCreate(
+                ['set_id' => $setId, 'user_id' => $user->id],
+                ['data' => $payload['data'], 'status' => 'draft']
+            );
+
+            return response()->json($draft);
+        } catch (\Throwable $e) {
+            Log::error('Error saving set draft', ['set_id' => $setId, 'user_id' => $user->id, 'error' => $e->getMessage()]);
+            return response()->json(['error' => 'No se pudo guardar el borrador'], 500);
+        }
+    }
+
+    /**
+     * Validar games según reglas SBS
+     */
+    private function validateGames(array $games, int $bestOf): array
+    {
+        $errors = [];
+        $validStages = [
+            'Battlefield',
+            'Small Battlefield',
+            'Final Destination',
+            'Smashville',
+            'Pokemon Stadium 2',
+            'Town and City',
+            "Yoshi's Story",
+            'Hollow Bastion',
+            'Kalos Pokemon League',
+        ];
+
+        // Validar número de games
+        $gamesNeeded = (int) ceil($bestOf / 2);
+        $scoreP1 = 0;
+        $scoreP2 = 0;
+        
+        foreach ($games as $index => $game) {
+            // Validar stage
+            if (!in_array($game['stage'], $validStages)) {
+                $errors[] = "Game {$game['index']}: Invalid stage '{$game['stage']}'";
+            }
+
+            // Validar stocks según ganador
+            if ($game['winner'] === 'p1') {
+                $scoreP1++;
+                if ($game['stocksP2'] !== 0) {
+                    $errors[] = "Game {$game['index']}: P2 must have 0 stocks when P1 wins";
+                }
+                if ($game['stocksP1'] < 1 || $game['stocksP1'] > 3) {
+                    $errors[] = "Game {$game['index']}: P1 stocks must be between 1-3";
+                }
+            } elseif ($game['winner'] === 'p2') {
+                $scoreP2++;
+                if ($game['stocksP1'] !== 0) {
+                    $errors[] = "Game {$game['index']}: P1 must have 0 stocks when P2 wins";
+                }
+                if ($game['stocksP2'] < 1 || $game['stocksP2'] > 3) {
+                    $errors[] = "Game {$game['index']}: P2 stocks must be between 1-3";
+                }
+            }
+        }
+
+        // Validar que haya un ganador del set
+        if ($scoreP1 < $gamesNeeded && $scoreP2 < $gamesNeeded) {
+            $errors[] = "Not enough games won. Best of {$bestOf} requires {$gamesNeeded} wins";
+        }
+
+        // No puede haber más games de los necesarios
+        if (count($games) > $bestOf) {
+            $errors[] = "Too many games. Best of {$bestOf} allows maximum {$bestOf} games";
+        }
+
+        return $errors;
+    }
+}
+
