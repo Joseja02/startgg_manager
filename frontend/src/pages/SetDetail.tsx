@@ -32,6 +32,7 @@ export default function SetDetail() {
   ]);
   const [openSections, setOpenSections] = useState<string[]>(['bans-1', 'game-1']);
   const currentGame = games[games.length - 1];
+  const [isEditingRejected, setIsEditingRejected] = useState(false);
 
   const { data: setDetail, isLoading } = useQuery({
     queryKey: ['setDetail', setId],
@@ -104,7 +105,31 @@ export default function SetDetail() {
   const gamesNeeded = Math.ceil(effectiveBestOf / 2);
 
   // Solo participantes pueden hacer RPS/Bans/Games (admins NO interfieren salvo que participen)
-  const canPlayerWorkflow = isParticipant && setDetail?.status === 'in_progress' && !lockedByReport;
+  const canPlayerWorkflow =
+    isParticipant &&
+    (setDetail?.status === 'in_progress' || (rejectedReport && isEditingRejected)) &&
+    !lockedByReport;
+
+  const resetForRejectedEdit = () => {
+    setIsEditingRejected(true);
+    setRpsWinner(null);
+    setRpsMode(null);
+    setBanInProgress(false);
+    setBansByGame({ 1: [] });
+    setOpenSections(['bans-1', 'game-1']);
+    setGames((prev) => {
+      if (prev.length === 0) {
+        return [{ index: 1, stage: null, winner: null, stocksP1: null, stocksP2: null }];
+      }
+      return prev.map((game) => ({ ...game, stage: null }));
+    });
+  };
+
+  useEffect(() => {
+    if (!rejectedReport) {
+      setIsEditingRejected(false);
+    }
+  }, [rejectedReport]);
 
   if (isLoading) {
     return (
@@ -150,6 +175,8 @@ export default function SetDetail() {
 
     return { mode: 'pick' as const, bansRemaining: 0, banner: getBannerForGame(game, bans), limit };
   };
+
+  const readonlyGames = games.length > 0 ? games : setDetail?.games ?? [];
 
   const handleRpsComplete = (winner: 'p1' | 'p2') => {
     setRpsWinner(winner);
@@ -364,6 +391,13 @@ export default function SetDetail() {
                 Motivo: {setDetail.existingReport.rejectionReason}
               </CardContent>
             )}
+            {isParticipant && !isEditingRejected && (
+              <CardContent>
+                <Button className="w-full" onClick={resetForRejectedEdit}>
+                  Editar reporte
+                </Button>
+              </CardContent>
+            )}
           </Card>
         )}
 
@@ -509,9 +543,9 @@ export default function SetDetail() {
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                      {(setDetail.games?.length ?? 0) > 0 ? (
+                      {readonlyGames.length > 0 ? (
                         <div className="space-y-3">
-                          {setDetail.games.map((game) => (
+                          {readonlyGames.map((game) => (
                             <GameRow
                               key={game.index}
                               game={game}

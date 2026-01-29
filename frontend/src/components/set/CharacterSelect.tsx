@@ -10,7 +10,7 @@ const CHARACTERS = [
   'lucas','captain_falcon','pikachu','pichu','jigglypuff','mewtwo','mr_game_and_watch','pit','dark_pit','palutena','robin',
   'rosalina_and_luma','little_mac','villager','olimar','wario','ness','ice_climbers','wolf','ike','chrom','marth','lucina',
   'ryu','ken','cloud','bayonetta','joker','pac_man','mii_fighter','sephiroth','minmin','sora','terry','steve','ridley','snake',
-  'sonic','mega_man','meta_knight','greninja','inkling','roxas'
+  'sonic','mega_man','meta_knight','greninja','inkling','sora'
 ];
 
 function slugToLabel(slug: string) {
