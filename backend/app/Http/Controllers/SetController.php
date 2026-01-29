@@ -28,6 +28,10 @@ class SetController extends Controller
         
         try {
             $setDetail = $this->client->getSetDetail($user, $setId);
+            $state = SetState::where('set_id', $setId)->first();
+            if ($state?->best_of) {
+                $setDetail['bestOf'] = (int) $state->best_of;
+            }
 
             // Adjuntar reporte existente (pendiente/aprobado/rechazado) para bloquear reprocesos
             $existingReport = Report::with(['games', 'user'])
@@ -87,6 +91,10 @@ class SetController extends Controller
     public function start(Request $request, $setId)
     {
         $user = Auth::user();
+        $payload = $request->validate([
+            'bestOf' => 'nullable|integer|in:3,5',
+        ]);
+        $bestOf = (int) ($payload['bestOf'] ?? 3);
         
         try {
             // Verificar que el usuario sea admin del torneo
@@ -94,6 +102,13 @@ class SetController extends Controller
 
             // Marcar el set como en progreso en start.gg
             $result = $this->client->markSetInProgress($user, $setId);
+
+            $state = SetState::firstOrCreate(
+                ['set_id' => $setId],
+                ['bans' => [], 'phase' => 'rps']
+            );
+            $state->best_of = $bestOf;
+            $state->save();
 
             // Invalidar caches relacionados para reflejar el nuevo estado
             $eventId = $setDetail['eventId'] ?? null;
@@ -204,6 +219,10 @@ class SetController extends Controller
 
             // Obtener información del set desde start.gg
             $setDetail = $this->client->getSetDetail($user, $setId);
+            $state = SetState::where('set_id', $setId)->first();
+            if ($state?->best_of) {
+                $setDetail['bestOf'] = (int) $state->best_of;
+            }
             
             // Validar que el usuario es uno de los participantes del set (userId o participant/entrant)
             $userStartggId = (string) $user->startgg_user_id;

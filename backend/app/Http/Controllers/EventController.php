@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Auth;
 use App\Services\StartggClient;
 use App\Services\StartggAppClient;
 use App\Models\Report;
+use App\Models\SetState;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
@@ -43,11 +44,18 @@ class EventController extends Controller
                     ->orderBy('created_at', 'desc')
                     ->get()
                     ->groupBy('set_id');
+                $states = SetState::whereIn('set_id', $setIds)
+                    ->get()
+                    ->keyBy('set_id');
 
                 $startggUserId = $user?->startgg_user_id;
 
-                $mapped = array_map(function (array $set) use ($reports, $mine, $startggUserId) {
+                $mapped = array_map(function (array $set) use ($reports, $states, $mine, $startggUserId) {
                     $report = $reports[$set['id']][0] ?? null;
+                    $state = $states->get($set['id']);
+                    if ($state?->best_of) {
+                        $set['bestOf'] = (int) $state->best_of;
+                    }
 
                     if ($report) {
                         $set['status'] = match ($report->status) {

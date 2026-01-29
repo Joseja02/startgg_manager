@@ -29,6 +29,7 @@ import { GameRow } from '@/components/set/GameRow';
 import { GamesHistory } from '@/components/set/GamesHistory';
 import { SetNotFound } from '@/components/set/SetNotFound';
 import { ScopeErrorModal } from '@/components/set/ScopeErrorModal';
+import { BestOfDialog } from '@/components/set/BestOfDialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -68,6 +69,7 @@ export default function SetPage() {
   const [notes, setNotes] = useState('');
   const [scopeErrorOpen, setScopeErrorOpen] = useState(false);
   const [scopeErrorMessage, setScopeErrorMessage] = useState('');
+  const [bestOfDialogOpen, setBestOfDialogOpen] = useState(false);
 
   // Initialize state from server data
   useEffect(() => {
@@ -150,10 +152,11 @@ export default function SetPage() {
   }
 
   // Handlers
-  const handleStartSet = async () => {
+  const handleStartSet = async (bestOf: 3 | 5) => {
     try {
-      await startSet();
+      await startSet(bestOf);
       await refetch();
+      setBestOfDialogOpen(false);
     } catch (err) {
       const axiosError = err as { response?: { status?: number; data?: { message?: string } } } | undefined;
       if (axiosError?.response?.status === 403) {
@@ -281,7 +284,7 @@ export default function SetPage() {
           <SetActions
             status={setDetail.status}
             isAdmin={isAdmin}
-            onStart={handleStartSet}
+            onStart={() => setBestOfDialogOpen(true)}
             onView={handleViewSet}
             onForceStatus={handleForceStatus}
             isStarting={isStarting}
@@ -426,6 +429,12 @@ export default function SetPage() {
           />
         )}
 
+        <BestOfDialog
+          open={bestOfDialogOpen}
+          onClose={() => setBestOfDialogOpen(false)}
+          onConfirm={handleStartSet}
+          isSubmitting={isStarting}
+        />
         {/* Scope Error Modal */}
         <ScopeErrorModal
           open={scopeErrorOpen}

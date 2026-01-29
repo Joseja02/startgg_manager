@@ -10,6 +10,7 @@ class SetState extends Model
 
     protected $fillable = [
         'set_id',
+        'best_of',
         'p1_choice',
         'p2_choice',
         'bans',
@@ -19,5 +20,6 @@ class SetState extends Model
 
     protected $casts = [
         'bans' => 'array',
+        'best_of' => 'integer',
     ];
 }

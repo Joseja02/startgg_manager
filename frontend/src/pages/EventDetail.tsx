@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import type { SetSummary } from '@/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
+import { BestOfDialog } from '@/components/set/BestOfDialog';
 
 export default function EventDetail() {
   const { eventId } = useParams<{ eventId: string }>();
@@ -18,6 +19,7 @@ export default function EventDetail() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [pendingStartSetId, setPendingStartSetId] = useState<SetSummary['id'] | null>(null);
 
   const { data: event, isLoading: eventLoading } = useQuery({
     queryKey: ['event', eventId],
@@ -46,13 +48,15 @@ export default function EventDetail() {
   }, [adminCheck?.isAdmin, queryClient, user?.role]);
 
   const startSetMutation = useMutation({
-    mutationFn: (setId: string | number) => competitorApi.startSet(setId),
+    mutationFn: ({ setId, bestOf }: { setId: string | number; bestOf: 3 | 5 }) =>
+      competitorApi.startSet(setId, bestOf),
     onSuccess: () => {
       toast({
         title: 'Set iniciado',
         description: 'El set ha sido marcado como en progreso',
       });
       refetchSets();
+      setPendingStartSetId(null);
     },
     onError: () => {
       toast({
@@ -62,6 +66,11 @@ export default function EventDetail() {
       });
     },
   });
+
+  const handleConfirmStart = (bestOf: 3 | 5) => {
+    if (!pendingStartSetId) return;
+    startSetMutation.mutate({ setId: pendingStartSetId, bestOf });
+  };
 
   if (eventLoading) {
     return (
@@ -119,24 +128,6 @@ export default function EventDetail() {
           </div>
         </div>
 
-        {/* Event Info */}
-        <Card>
-          <CardContent className="p-4">
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div>
-                <p className="text-muted-foreground text-xs">Estado</p>
-                <Badge variant={event.status === 'active' ? 'default' : 'secondary'}>
-                  {event.status === 'active' ? 'Activo' : 'Próximo'}
-                </Badge>
-              </div>
-              <div>
-                <p className="text-muted-foreground text-xs">Formato</p>
-                <p className="font-medium">Best of {event.bestOf}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
         {/* Sets List */}
         <section className="space-y-3">
           <div className="flex items-center justify-between">
@@ -192,7 +183,7 @@ export default function EventDetail() {
                         <div className="space-y-2">
                           {set.status === 'not_started' && (
                             <Button
-                              onClick={() => startSetMutation.mutate(set.id)}
+                              onClick={() => setPendingStartSetId(set.id)}
                               disabled={startSetMutation.isPending}
                               className="w-full gap-2"
                             >
@@ -244,6 +235,12 @@ export default function EventDetail() {
           )}
         </section>
       </div>
+      <BestOfDialog
+        open={pendingStartSetId !== null}
+        onClose={() => setPendingStartSetId(null)}
+        onConfirm={handleConfirmStart}
+        isSubmitting={startSetMutation.isPending}
+      />
     </AppLayout>
   );
 }

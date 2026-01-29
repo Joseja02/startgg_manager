@@ -20,7 +20,7 @@ export function useSetData(setId: string | undefined) {
   });
 
   const startMutation = useMutation({
-    mutationFn: () => competitorApi.startSet(setId!),
+    mutationFn: (bestOf: 3 | 5) => competitorApi.startSet(setId!, bestOf),
     onSuccess: () => {
       toast({
         title: 'Set iniciado',

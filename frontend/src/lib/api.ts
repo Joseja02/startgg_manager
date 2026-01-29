@@ -48,7 +48,8 @@ export const competitorApi = {
   getEventSets: (eventId: string | number, params?: { mine?: 1; status?: string }) =>
     api.get<SetSummary[]>(`/events/${eventId}/sets`, { params }).then(res => res.data),
   getSetDetail: (setId: string | number) => api.get<SetDetail>(`/sets/${setId}`).then(res => res.data),
-  startSet: (setId: string | number) => api.post(`/sets/${setId}/start`).then(res => res.data),
+  startSet: (setId: string | number, bestOf?: 3 | 5) =>
+    api.post(`/sets/${setId}/start`, bestOf ? { bestOf } : undefined).then(res => res.data),
   submitReport: (setId: string | number, data: { games: GameRecord[]; notes?: string }) =>
     api.post(`/sets/${setId}/submit`, data).then(res => res.data),
   // Real-time helpers for RPS and bans
