@@ -80,7 +80,7 @@ const AppRoutes = () => (
 );
 
 const App = () => (
-  <BrowserRouter basename="/StartGG-Manager">
+  <BrowserRouter basename={import.meta.env.BASE_URL}>
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <AppRoutes />
