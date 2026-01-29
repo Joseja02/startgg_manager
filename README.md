@@ -4,22 +4,24 @@ Gestor web para torneos de Smash Ultimate que se conecta a start.gg. Pensado par
 
 ## Que ofrece
 - Ver eventos activos y navegar a sus sets.
-- Iniciar un set y seguirlo con control de RPS, bans y formato best-of.
+- Iniciar un set y seguirlo con control de RPS, bans y formato BO3 o BO5. Se utiliza el ruleset oficial de SmashBrosSpain.
 - Registrar y enviar el resultado para que lo revise un administrador.
-- Consultar estados claros: en progreso, enviado, aprobado o rechazado.
+- Posibilidad de revisar reportes de los jugadores para aprobarlos o rechazarlos y/o modificarlos en caso de que haya algún error o disputa.
 
 ## Como funciona
 1) Elige un evento y abre la lista de sets disponibles.
-2) Si eres participante o admin, inicia el set y registra cada juego (etapa, ganador, stocks).
-3) Envía el reporte para que un admin lo valide.
-4) Revisa el estado del set desde el dashboard: en progreso, pendiente de revision, aprobado o rechazado.
+2) Si eres admin, inicia el set y si participas en dicho set, empiezas el procedimiento del set.
+3) Si eres player, esperas a que un admin inicie tu set y comienzas el procedimiento del mismo
+4) Siguiendo el ruleset oficial de SmashBrosSpain, la app te guiará sobre el procedimiento de un set hasta que finalice el mismo.
+5) Envía el reporte para que un admin lo valide.
+6) Revisa el estado del set desde el dashboard: en progreso, pendiente de revision, aprobado o rechazado.
 
 ## Acceso
 La aplicacion es web: basta con abrir el enlace publico que se proporcione (ej. dominio o GitHub Pages) y autenticarte con tu cuenta de start.gg. Desde alli veras tu panel con eventos y sets disponibles.
 
 ## Roles
 - Administrador: puede iniciar sets, revisar y aprobar o rechazar reportes.
-- Competidor: puede iniciar y reportar sus propios sets, y ver su estado.
+- Competidor: puede reportar sus propios sets a un administrador, y ver su estado, además de actualizar sets rechazados.
 
 ## Estructura del proyecto
 ```
