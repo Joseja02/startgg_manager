@@ -67,6 +67,11 @@ class EventController extends Controller
                         $set['reportStatus'] = $report->status;
                     }
 
+                    // No mostrar sets reportados/aprobados en el dashboard
+                    if (in_array($set['status'], ['reported', 'approved'], true)) {
+                        return null;
+                    }
+
                     // Filtrar por sets del usuario si se pide "mine"
                     if ($mine && $startggUserId) {
                         $isMine = (string)($set['p1']['userId'] ?? '') === (string)$startggUserId
