@@ -199,6 +199,14 @@ export default function EventDetail() {
                               Ver Set
                             </Button>
                           )}
+                          {set.status === 'rejected' && userOwnsSet && (
+                            <Button
+                              onClick={() => navigate(`/sets/${set.id}?mode=player&edit=1`)}
+                              className="w-full"
+                            >
+                              Editar Reporte
+                            </Button>
+                          )}
                           {(set.status === 'completed' || set.status === 'reported' || set.status === 'approved') && (
                             <Button
                               onClick={() => navigate(`/sets/${set.id}`)}
