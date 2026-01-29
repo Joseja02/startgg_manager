@@ -267,7 +267,6 @@ class StartggClient
             name
             slug
             startAt
-            isAdmin
             videogame {
               id
               name
@@ -297,7 +296,7 @@ class StartggClient
         $tournamentId = data_get($event, 'tournament.id');
         $tournamentOwner = data_get($event, 'tournament.owner.id');
         $userId = (int) $user->startgg_user_id;
-        $isAdminEvent = (bool) data_get($event, 'isAdmin');
+        $isAdminEvent = false;
         
         // WORKAROUND: La API no devuelve admins con OAuth tokens
         // Consideramos admin a:
@@ -306,7 +305,7 @@ class StartggClient
         // Para verificar permisos reales, debemos intentar hacer la mutación
         $isAdmin = $tournamentOwner == $userId;
         if ($isAdminEvent) {
-          $isAdmin = true; // API explicitly says user is admin for this event
+          $isAdmin = true; // mantenido por compatibilidad si se añade en el futuro
         }
         
         // Si no es owner, verificar si el torneo aparece en sus torneos
@@ -341,6 +340,8 @@ class StartggClient
             }
         }
         
+        $isAdminEvent = $isAdmin;
+
         Log::info('Event admin check', [
             'event_id' => $eventId,
             'tournament_id' => $tournamentId,
