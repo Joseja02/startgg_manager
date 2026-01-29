@@ -39,6 +39,10 @@ export function GameRow({ game, p1Name, p2Name, onChange, readonly = false, lock
   };
 
   const isComplete = game.stage && game.winner && game.characterP1 && game.characterP2;
+  const stocksP1Value =
+    game.stocksP1 === null ? 'unknown' : (game.stocksP1?.toString() || '');
+  const stocksP2Value =
+    game.stocksP2 === null ? 'unknown' : (game.stocksP2?.toString() || '');
 
   return (
     <Card className={isComplete ? 'border-success/50' : ''}>
@@ -101,23 +105,21 @@ export function GameRow({ game, p1Name, p2Name, onChange, readonly = false, lock
           <div className="space-y-2">
             <Label>{p1Name} - Stocks</Label>
             <Select
-              value={game.stocksP1?.toString() || ''}
-              onValueChange={(value) => updateGame({ stocksP1: Number(value) as 0 | 1 | 2 | 3 })}
-              disabled={readonly || game.winner !== 'p1'}
+              value={stocksP1Value}
+              onValueChange={(value) =>
+                updateGame({ stocksP1: value === 'unknown' ? null : (Number(value) as 0 | 1 | 2 | 3) })
+              }
+              disabled={readonly}
             >
               <SelectTrigger>
                 <SelectValue placeholder="-" />
               </SelectTrigger>
               <SelectContent>
-                {game.winner === 'p1' ? (
-                  <>
-                    <SelectItem value="1">1 stock</SelectItem>
-                    <SelectItem value="2">2 stocks</SelectItem>
-                    <SelectItem value="3">3 stocks</SelectItem>
-                  </>
-                ) : (
-                  <SelectItem value="0">0 stocks</SelectItem>
-                )}
+                <SelectItem value="unknown">Desconocido</SelectItem>
+                <SelectItem value="0">0 stocks</SelectItem>
+                <SelectItem value="1">1 stock</SelectItem>
+                <SelectItem value="2">2 stocks</SelectItem>
+                <SelectItem value="3">3 stocks</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -125,23 +127,21 @@ export function GameRow({ game, p1Name, p2Name, onChange, readonly = false, lock
           <div className="space-y-2">
             <Label>{p2Name} - Stocks</Label>
             <Select
-              value={game.stocksP2?.toString() || ''}
-              onValueChange={(value) => updateGame({ stocksP2: Number(value) as 0 | 1 | 2 | 3 })}
-              disabled={readonly || game.winner !== 'p2'}
+              value={stocksP2Value}
+              onValueChange={(value) =>
+                updateGame({ stocksP2: value === 'unknown' ? null : (Number(value) as 0 | 1 | 2 | 3) })
+              }
+              disabled={readonly}
             >
               <SelectTrigger>
                 <SelectValue placeholder="-" />
               </SelectTrigger>
               <SelectContent>
-                {game.winner === 'p2' ? (
-                  <>
-                    <SelectItem value="1">1 stock</SelectItem>
-                    <SelectItem value="2">2 stocks</SelectItem>
-                    <SelectItem value="3">3 stocks</SelectItem>
-                  </>
-                ) : (
-                  <SelectItem value="0">0 stocks</SelectItem>
-                )}
+                <SelectItem value="unknown">Desconocido</SelectItem>
+                <SelectItem value="0">0 stocks</SelectItem>
+                <SelectItem value="1">1 stock</SelectItem>
+                <SelectItem value="2">2 stocks</SelectItem>
+                <SelectItem value="3">3 stocks</SelectItem>
               </SelectContent>
             </Select>
           </div>

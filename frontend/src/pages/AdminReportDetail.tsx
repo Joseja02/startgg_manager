@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AppLayout } from '@/components/layouts/AppLayout';
@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { ScoreBoard } from '@/components/set/ScoreBoard';
+import { GameRow } from '@/components/set/GameRow';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,17 +23,57 @@ import { adminApi } from '@/lib/api';
 import { ArrowLeft, Check, X } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
+import type { GameRecord } from '@/types';
 
 export default function AdminReportDetail() {
   const { reportId } = useParams<{ reportId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [rejectionReason, setRejectionReason] = useState('');
+  const [isEditing, setIsEditing] = useState(false);
+  const [notes, setNotes] = useState('');
+  const [games, setGames] = useState<GameRecord[]>([]);
 
   const { data: report, isLoading } = useQuery({
     queryKey: ['reportDetail', reportId],
     queryFn: () => adminApi.getReportDetail(reportId!),
     enabled: !!reportId,
+  });
+
+  useEffect(() => {
+    if (!report) return;
+    setNotes(report.notes || '');
+    setGames(report.games.map((g) => ({
+      index: g.index,
+      stage: g.stage,
+      winner: g.winner,
+      stocksP1: g.stocksP1 ?? null,
+      stocksP2: g.stocksP2 ?? null,
+      characterP1: g.characterP1 || '',
+      characterP2: g.characterP2 || '',
+    })));
+  }, [report]);
+
+  const canSaveEdits = useMemo(() => {
+    if (!games.length) return false;
+    return games.every((g) => !!g.stage && !!g.winner && !!g.characterP1 && !!g.characterP2);
+  }, [games]);
+
+  const updateMutation = useMutation({
+    mutationFn: () => adminApi.updateReport(reportId!, { games, notes: notes || undefined }),
+    onSuccess: () => {
+      toast({ title: 'Cambios guardados', description: 'El reporte volvió a estado pendiente.' });
+      queryClient.invalidateQueries({ queryKey: ['reportDetail', reportId] });
+      queryClient.invalidateQueries({ queryKey: ['adminReports'] });
+      setIsEditing(false);
+    },
+    onError: () => {
+      toast({
+        title: 'Error',
+        description: 'No se pudo guardar el reporte',
+        variant: 'destructive',
+      });
+    },
   });
 
   const approveMutation = useMutation({
@@ -115,6 +156,7 @@ export default function AdminReportDetail() {
   };
 
   const isPending = report.status === 'pending';
+  const isEditable = report.status === 'pending' || report.status === 'rejected';
 
   return (
     <AppLayout>
@@ -176,29 +218,70 @@ export default function AdminReportDetail() {
 
         {/* Games */}
         <section className="space-y-3">
-          <h2 className="text-lg font-display">Games</h2>
-          {report.games.map((game) => (
-            <Card key={game.index}>
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-medium">Game {game.index}</span>
-                  <Badge variant="outline">{game.stage}</Badge>
-                </div>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div className={`p-2 rounded-lg text-center ${game.winner === 'p1' ? 'bg-success/10 text-success' : 'bg-muted'}`}>
-                    <p className="text-xs text-muted-foreground mb-0.5">{report.p1.name}</p>
-                    <p className="font-medium">{game.characterP1 || '-'}</p>
-                    <p className="text-xs">{game.stocksP1} stocks</p>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-display">Games</h2>
+            {isEditable && (
+              <Button variant="outline" size="sm" onClick={() => setIsEditing((v) => !v)}>
+                {isEditing ? 'Cancelar edición' : 'Editar'}
+              </Button>
+            )}
+          </div>
+
+          {isEditing ? (
+            <div className="space-y-3">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Notas</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notas..." />
+                </CardContent>
+              </Card>
+
+              {games.map((g) => (
+                <GameRow
+                  key={g.index}
+                  game={g}
+                  p1Name={report.p1.name}
+                  p2Name={report.p2.name}
+                  onChange={(updated) => setGames((prev) => prev.map((x) => (x.index === updated.index ? updated : x)))}
+                  readonly={false}
+                  lockStage={false}
+                />
+              ))}
+
+              <Button
+                onClick={() => updateMutation.mutate()}
+                disabled={!canSaveEdits || updateMutation.isPending}
+                className="w-full"
+              >
+                {updateMutation.isPending ? 'Guardando...' : 'Guardar cambios'}
+              </Button>
+            </div>
+          ) : (
+            report.games.map((game) => (
+              <Card key={game.index}>
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-medium">Game {game.index}</span>
+                    <Badge variant="outline">{game.stage}</Badge>
                   </div>
-                  <div className={`p-2 rounded-lg text-center ${game.winner === 'p2' ? 'bg-success/10 text-success' : 'bg-muted'}`}>
-                    <p className="text-xs text-muted-foreground mb-0.5">{report.p2.name}</p>
-                    <p className="font-medium">{game.characterP2 || '-'}</p>
-                    <p className="text-xs">{game.stocksP2} stocks</p>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className={`p-2 rounded-lg text-center ${game.winner === 'p1' ? 'bg-success/10 text-success' : 'bg-muted'}`}>
+                      <p className="text-xs text-muted-foreground mb-0.5">{report.p1.name}</p>
+                      <p className="font-medium">{game.characterP1 || '-'}</p>
+                      <p className="text-xs">{game.stocksP1 ?? 'Desconocido'} stocks</p>
+                    </div>
+                    <div className={`p-2 rounded-lg text-center ${game.winner === 'p2' ? 'bg-success/10 text-success' : 'bg-muted'}`}>
+                      <p className="text-xs text-muted-foreground mb-0.5">{report.p2.name}</p>
+                      <p className="font-medium">{game.characterP2 || '-'}</p>
+                      <p className="text-xs">{game.stocksP2 ?? 'Desconocido'} stocks</p>
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            ))
+          )}
         </section>
 
         {/* Actions */}

@@ -93,6 +93,24 @@ class SetController extends Controller
             // Verificar que el usuario sea admin del torneo
             $setDetail = $this->client->getSetDetail($user, $setId);
 
+            // Si start.gg indica que el set NO está iniciado, debemos empezar "limpio"
+            // y no arrastrar reportes/bans/drafts previos (caso típico: set reiniciado tras rechazo).
+            if (($setDetail['status'] ?? null) === 'not_started') {
+                DB::beginTransaction();
+                try {
+                    // Borrar reportes previos (cascade borra games)
+                    Report::where('set_id', $setId)->delete();
+                    // Borrar borradores
+                    SetDraft::where('set_id', $setId)->delete();
+                    // Resetear estado del set (RPS/bans/best_of)
+                    SetState::where('set_id', $setId)->delete();
+                    DB::commit();
+                } catch (\Throwable $e) {
+                    DB::rollBack();
+                    throw $e;
+                }
+            }
+
             // Marcar el set como en progreso en start.gg
             $result = $this->client->markSetInProgress($user, $setId);
 
@@ -185,10 +203,12 @@ class SetController extends Controller
             'games.*.index' => 'required|integer|min:1',
             'games.*.stage' => 'required|string',
             'games.*.winner' => 'required|in:p1,p2',
-            'games.*.stocksP1' => 'required|integer|min:0|max:3',
-            'games.*.stocksP2' => 'required|integer|min:0|max:3',
-            'games.*.characterP1' => 'nullable|string',
-            'games.*.characterP2' => 'nullable|string',
+            // Stocks pueden ser desconocidas (null)
+            'games.*.stocksP1' => 'nullable|integer|min:0|max:3',
+            'games.*.stocksP2' => 'nullable|integer|min:0|max:3',
+            // En edición, los personajes deben estar especificados
+            'games.*.characterP1' => 'required|string',
+            'games.*.characterP2' => 'required|string',
             'notes' => 'nullable|string|max:1000',
         ]);
 
@@ -591,22 +611,31 @@ class SetController extends Controller
                 $errors[] = "Game {$game['index']}: Invalid stage '{$game['stage']}'";
             }
 
-            // Validar stocks según ganador
+            // Validar personajes requeridos
+            if (empty($game['characterP1']) || empty($game['characterP2'])) {
+                $errors[] = "Game {$game['index']}: Missing character selection";
+            }
+
+            // Validar stocks según ganador (si se proporcionan; pueden ser desconocidos)
             if ($game['winner'] === 'p1') {
                 $scoreP1++;
-                if ($game['stocksP2'] !== 0) {
-                    $errors[] = "Game {$game['index']}: P2 must have 0 stocks when P1 wins";
-                }
-                if ($game['stocksP1'] < 1 || $game['stocksP1'] > 3) {
-                    $errors[] = "Game {$game['index']}: P1 stocks must be between 1-3";
+                if ($game['stocksP1'] !== null || $game['stocksP2'] !== null) {
+                    if ($game['stocksP2'] !== 0) {
+                        $errors[] = "Game {$game['index']}: P2 must have 0 stocks when P1 wins";
+                    }
+                    if ($game['stocksP1'] < 1 || $game['stocksP1'] > 3) {
+                        $errors[] = "Game {$game['index']}: P1 stocks must be between 1-3";
+                    }
                 }
             } elseif ($game['winner'] === 'p2') {
                 $scoreP2++;
-                if ($game['stocksP1'] !== 0) {
-                    $errors[] = "Game {$game['index']}: P1 must have 0 stocks when P2 wins";
-                }
-                if ($game['stocksP2'] < 1 || $game['stocksP2'] > 3) {
-                    $errors[] = "Game {$game['index']}: P2 stocks must be between 1-3";
+                if ($game['stocksP1'] !== null || $game['stocksP2'] !== null) {
+                    if ($game['stocksP1'] !== 0) {
+                        $errors[] = "Game {$game['index']}: P1 must have 0 stocks when P2 wins";
+                    }
+                    if ($game['stocksP2'] < 1 || $game['stocksP2'] > 3) {
+                        $errors[] = "Game {$game['index']}: P2 stocks must be between 1-3";
+                    }
                 }
             }
         }

@@ -39,6 +39,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('admin')->middleware('admin')->group(function () {
         Route::get('/reports', [ReportController::class, 'index']);
         Route::get('/reports/{reportId}', [ReportController::class, 'show']);
+        Route::put('/reports/{reportId}', [ReportController::class, 'update']);
         Route::post('/reports/{reportId}/approve', [ReportController::class, 'approve']);
         Route::post('/reports/{reportId}/reject', [ReportController::class, 'reject']);
     });

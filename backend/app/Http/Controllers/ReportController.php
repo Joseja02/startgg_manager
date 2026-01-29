@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Models\Report;
+use App\Models\Game;
 use App\Services\StartggClient;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 class ReportController extends Controller
 {
@@ -96,6 +98,73 @@ class ReportController extends Controller
         ];
 
         return response()->json($reportDetail);
+    }
+
+    /**
+     * Actualizar un reporte (admin) para corregir games antes de aprobar
+     * PUT /api/admin/reports/{reportId}
+     */
+    public function update(Request $request, $reportId)
+    {
+        $report = Report::with('games')->findOrFail($reportId);
+
+        // Permitir editar reportes pending o rejected (admin puede arreglar y reenviar)
+        if (!in_array($report->status, ['pending', 'rejected'], true)) {
+            return response()->json(['error' => 'Report is not editable'], 400);
+        }
+
+        $payload = $request->validate([
+            'games' => 'required|array|min:1',
+            'games.*.index' => 'required|integer|min:1',
+            'games.*.stage' => 'required|string',
+            'games.*.winner' => 'required|in:p1,p2',
+            'games.*.stocksP1' => 'nullable|integer|min:0|max:3',
+            'games.*.stocksP2' => 'nullable|integer|min:0|max:3',
+            'games.*.characterP1' => 'required|string',
+            'games.*.characterP2' => 'required|string',
+            'notes' => 'nullable|string|max:1000',
+        ]);
+
+        $games = $payload['games'];
+        $scoreP1 = 0;
+        $scoreP2 = 0;
+        foreach ($games as $g) {
+            if (($g['winner'] ?? null) === 'p1') $scoreP1++;
+            if (($g['winner'] ?? null) === 'p2') $scoreP2++;
+        }
+
+        DB::beginTransaction();
+        try {
+            $report->score_p1 = $scoreP1;
+            $report->score_p2 = $scoreP2;
+            $report->notes = $payload['notes'] ?? $report->notes;
+            $report->status = 'pending';
+            $report->rejection_reason = null;
+            $report->save();
+
+            // Reemplazar games
+            $report->games()->delete();
+            foreach ($games as $gameData) {
+                Game::create([
+                    'report_id' => $report->id,
+                    'game_index' => $gameData['index'],
+                    'stage' => $gameData['stage'],
+                    'winner' => $gameData['winner'],
+                    'stocks_p1' => $gameData['stocksP1'] ?? null,
+                    'stocks_p2' => $gameData['stocksP2'] ?? null,
+                    'character_p1' => $gameData['characterP1'],
+                    'character_p2' => $gameData['characterP2'],
+                ]);
+            }
+
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('Error updating report', ['report_id' => $reportId, 'error' => $e->getMessage()]);
+            return response()->json(['error' => 'Failed to update report', 'message' => $e->getMessage()], 500);
+        }
+
+        return $this->show($report->id);
     }
 
     /**

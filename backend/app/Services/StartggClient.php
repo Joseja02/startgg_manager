@@ -737,11 +737,9 @@ class StartggClient
       if ($report->relationLoaded('games') || $report->games()->exists()) {
         $games = $report->games()->orderBy('game_index')->get();
         foreach ($games as $game) {
-          $gameData[] = [
+          $entry = [
             'winnerId' => $game->winner === 'p1' ? $report->p1_entrant_id : $report->p2_entrant_id,
             'gameNum' => $game->game_index,
-            'entrant1Score' => $game->stocks_p1,
-            'entrant2Score' => $game->stocks_p2,
             'stageId' => $mapStageId($game->stage),
             'selections' => array_values(array_filter([
               $mapCharId($game->character_p1) ? [
@@ -754,6 +752,14 @@ class StartggClient
               ] : null,
             ])),
           ];
+
+          // Stocks opcionales: si alguno es desconocido (null), no enviamos scores a start.gg
+          if ($game->stocks_p1 !== null && $game->stocks_p2 !== null) {
+            $entry['entrant1Score'] = $game->stocks_p1;
+            $entry['entrant2Score'] = $game->stocks_p2;
+          }
+
+          $gameData[] = $entry;
         }
       }
 

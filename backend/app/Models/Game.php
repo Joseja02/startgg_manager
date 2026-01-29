@@ -37,6 +37,11 @@ class Game extends Model
      */
     public function validateStocks(): bool
     {
+        // Stocks desconocidos: no validar
+        if ($this->stocks_p1 === null || $this->stocks_p2 === null) {
+            return true;
+        }
+
         if ($this->winner === 'p1') {
             return $this->stocks_p2 === 0 && $this->stocks_p1 >= 1 && $this->stocks_p1 <= 3;
         }

@@ -57,7 +57,7 @@ export const competitorApi = {
   postRpsChoice: (setId: string | number, choice: string) => api.post(`/sets/${setId}/rps`, { choice }).then(res => res.data),
   postBan: (setId: string | number, stage: string, allStages?: string[]) => api.post(`/sets/${setId}/bans`, { stage, allStages }).then(res => res.data),
   getSetDraft: (setId: string | number) => api.get(`/sets/${setId}/draft`).then(res => res.data),
-  postSetDraft: (setId: string | number, data: any) => api.post(`/sets/${setId}/draft`, { data }).then(res => res.data),
+  postSetDraft: (setId: string | number, data: unknown) => api.post(`/sets/${setId}/draft`, { data }).then(res => res.data),
 };
 
 // Admin
@@ -66,6 +66,8 @@ export const adminApi = {
     api.get<ReportSummary[]>('/admin/reports', { params }).then(res => res.data),
   getReportDetail: (reportId: string | number) =>
     api.get<ReportDetail>(`/admin/reports/${reportId}`).then(res => res.data),
+  updateReport: (reportId: string | number, data: { games: GameRecord[]; notes?: string }) =>
+    api.put<ReportDetail>(`/admin/reports/${reportId}`, data).then(res => res.data),
   approveReport: (reportId: string | number) =>
     api.post(`/admin/reports/${reportId}/approve`).then(res => res.data),
   rejectReport: (reportId: string | number, reason: string) =>

@@ -192,7 +192,7 @@ export default function EventDetail() {
                               Iniciar Set
                             </Button>
                           )}
-                          {set.status === 'in_progress' && (
+                          {set.status === 'in_progress' && !canEditRejected && (
                             <Button
                               onClick={() => navigate(`/sets/${set.id}`)}
                               className="w-full"

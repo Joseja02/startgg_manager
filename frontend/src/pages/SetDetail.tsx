@@ -497,7 +497,7 @@ export default function SetDetail() {
                             p1Name={setDetail.p1.name}
                             p2Name={setDetail.p2.name}
                             onChange={handleGameChange}
-                            readonly={idx < games.length - 1}
+                            readonly={!isEditingRejectedFlow && idx < games.length - 1}
                             lockStage={!isEditingRejectedFlow}
                           />
                         </div>
