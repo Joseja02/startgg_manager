@@ -39,14 +39,7 @@ class SetController extends Controller
                 ->latest()
                 ->first();
 
-            if ($existingReport) {
-                $setDetail['status'] = match ($existingReport->status) {
-                    'pending' => 'reported',
-                    'approved' => 'approved',
-                    'rejected' => 'rejected',
-                    default => $setDetail['status'],
-                };
-
+            if ($existingReport && ($setDetail['status'] ?? null) !== 'not_started') {
                 $setDetail['existingReport'] = [
                     'id' => $existingReport->id,
                     'status' => $existingReport->status,

@@ -155,6 +155,7 @@ export default function EventDetail() {
             <div className="space-y-3">
               {sets.map((set) => {
                 const status = set.status;
+                const canEditRejected = set.reportStatus === 'rejected' && set.status !== 'not_started';
                 const statusInfo = getStatusBadge(status);
                 const userOwnsSet = isUserSet(set);
 
@@ -199,7 +200,7 @@ export default function EventDetail() {
                               Ver Set
                             </Button>
                           )}
-                          {set.status === 'rejected' && userOwnsSet && (
+                          {canEditRejected && userOwnsSet && (
                             <Button
                               onClick={() => navigate(`/sets/${set.id}?mode=player&edit=1`)}
                               className="w-full"
@@ -218,14 +219,14 @@ export default function EventDetail() {
                             </Button>
                           )}
                         </div>
-                      ) : userOwnsSet && (set.status === 'in_progress' || set.status === 'rejected') ? (
+                      ) : userOwnsSet && (set.status === 'in_progress' || canEditRejected) ? (
                         <Button
                           onClick={() =>
-                            navigate(`/sets/${set.id}?mode=player${set.status === 'rejected' ? '&edit=1' : ''}`)
+                            navigate(`/sets/${set.id}?mode=player${canEditRejected ? '&edit=1' : ''}`)
                           }
                           className="w-full"
                         >
-                          {set.status === 'rejected' ? 'Editar Reporte' : 'Reportar Set'}
+                          {canEditRejected ? 'Editar Reporte' : 'Reportar Set'}
                         </Button>
                       ) : (
                         <Button

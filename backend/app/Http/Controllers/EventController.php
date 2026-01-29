@@ -58,17 +58,11 @@ class EventController extends Controller
                     }
 
                     if ($report) {
-                        $set['status'] = match ($report->status) {
-                            'pending' => 'reported',
-                            'approved' => 'approved',
-                            'rejected' => 'rejected',
-                            default => $set['status'],
-                        };
                         $set['reportStatus'] = $report->status;
                     }
 
-                    // No mostrar sets reportados/aprobados en el dashboard
-                    if (in_array($set['status'], ['reported', 'approved'], true)) {
+                    // No mostrar sets reportados/aprobados en el dashboard (según estado local)
+                    if (in_array($set['reportStatus'] ?? null, ['pending', 'approved'], true)) {
                         return null;
                     }
 

@@ -112,6 +112,8 @@ export default function SetDetail() {
     (setDetail?.status === 'in_progress' || (rejectedReport && isEditingRejected)) &&
     !lockedByReport;
 
+  const isEditingRejectedFlow = rejectedReport && isEditingRejected;
+
   const resetForRejectedEdit = () => {
     setIsEditingRejected(true);
     setRpsWinner(null);
@@ -411,7 +413,7 @@ export default function SetDetail() {
 
         {canPlayerWorkflow ? (
           <>
-            {!rpsWinner && (
+            {!rpsWinner && !isEditingRejectedFlow && (
               <Card>
                 <CardHeader>
                   <CardTitle>Comenzar set</CardTitle>
@@ -444,40 +446,42 @@ export default function SetDetail() {
 
                 return (
                   <React.Fragment key={game.index}>
-                    <AccordionItem value={`bans-${game.index}`} className="border rounded-lg px-4">
-                      <AccordionTrigger className="text-lg font-semibold">
-                        <div className="flex items-center gap-2">
-                          <span>Bans Game {game.index}</span>
-                          {flow.banner && (
-                            <span className="text-xs text-muted-foreground">Turno: {flow.banner === 'p1' ? setDetail.p1.name : setDetail.p2.name}</span>
-                          )}
-                          {flow.mode === 'ban' && <span className="text-xs text-muted-foreground">({flow.bansRemaining} bans restantes)</span>}
-                        </div>
-                      </AccordionTrigger>
-                      <AccordionContent>
-                        <div className="space-y-3 pt-1">
-                          <StageSelector
-                            bannedStages={bans}
-                            pickedStage={game.stage}
-                            mode={flow.mode}
-                            bansRemaining={flow.bansRemaining}
-                            busy={banInProgress && isCurrent}
-                            onBan={handleBan(game.index)}
-                            onPick={flow.mode === 'pick' && isCurrent ? handlePick : (_stage) => {}}
-                            currentBanner={flow.banner}
-                            p1Name={setDetail.p1.name}
-                            p2Name={setDetail.p2.name}
-                          />
+                    {!isEditingRejectedFlow && (
+                      <AccordionItem value={`bans-${game.index}`} className="border rounded-lg px-4">
+                        <AccordionTrigger className="text-lg font-semibold">
+                          <div className="flex items-center gap-2">
+                            <span>Bans Game {game.index}</span>
+                            {flow.banner && (
+                              <span className="text-xs text-muted-foreground">Turno: {flow.banner === 'p1' ? setDetail.p1.name : setDetail.p2.name}</span>
+                            )}
+                            {flow.mode === 'ban' && <span className="text-xs text-muted-foreground">({flow.bansRemaining} bans restantes)</span>}
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent>
+                          <div className="space-y-3 pt-1">
+                            <StageSelector
+                              bannedStages={bans}
+                              pickedStage={game.stage}
+                              mode={flow.mode}
+                              bansRemaining={flow.bansRemaining}
+                              busy={banInProgress && isCurrent}
+                              onBan={handleBan(game.index)}
+                              onPick={flow.mode === 'pick' && isCurrent ? handlePick : (_stage) => {}}
+                              currentBanner={flow.banner}
+                              p1Name={setDetail.p1.name}
+                              p2Name={setDetail.p2.name}
+                            />
 
-                          {showRepeat && (
-                            <Button variant="outline" className="w-full" onClick={handleRepeatBans}>
-                              Repetir bans de este game
-                            </Button>
-                          )}
+                            {showRepeat && (
+                              <Button variant="outline" className="w-full" onClick={handleRepeatBans}>
+                                Repetir bans de este game
+                              </Button>
+                            )}
 
-                        </div>
-                      </AccordionContent>
-                    </AccordionItem>
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    )}
 
                     <AccordionItem value={`game-${game.index}`} className="border rounded-lg px-4">
                       <AccordionTrigger className="text-lg font-semibold">
@@ -494,7 +498,7 @@ export default function SetDetail() {
                             p2Name={setDetail.p2.name}
                             onChange={handleGameChange}
                             readonly={idx < games.length - 1}
-                            lockStage={true}
+                            lockStage={!isEditingRejectedFlow}
                           />
                         </div>
                       </AccordionContent>
