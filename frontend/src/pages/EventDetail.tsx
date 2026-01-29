@@ -1,5 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,6 +17,7 @@ export default function EventDetail() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const { data: event, isLoading: eventLoading } = useQuery({
     queryKey: ['event', eventId],
@@ -28,6 +30,20 @@ export default function EventDetail() {
     queryFn: () => competitorApi.getEventSets(eventId!),
     enabled: !!eventId,
   });
+
+  const { data: adminCheck } = useQuery({
+    queryKey: ['eventAdminCheck', eventId],
+    queryFn: () => competitorApi.getEventAdminCheck(eventId!, event?.tournamentSlug),
+    enabled: !!eventId && !!event && user?.role !== 'admin',
+    staleTime: 0,
+    retry: false,
+  });
+
+  useEffect(() => {
+    if (adminCheck?.isAdmin && user?.role !== 'admin') {
+      queryClient.invalidateQueries({ queryKey: ['user'] });
+    }
+  }, [adminCheck?.isAdmin, queryClient, user?.role]);
 
   const startSetMutation = useMutation({
     mutationFn: (setId: string | number) => competitorApi.startSet(setId),
