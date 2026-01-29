@@ -379,7 +379,7 @@ export default function SetDetail() {
                   {!rpsMode && (
                     <Button onClick={() => setRpsMode('local')} className="w-full gap-2">
                       <Users className="h-4 w-4" />
-                      Iniciar RPS local
+                      Iniciar Piedra, Papel o Tijeras
                     </Button>
                   )}
                   {rpsMode === 'local' && (

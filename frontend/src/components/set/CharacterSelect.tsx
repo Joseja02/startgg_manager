@@ -89,7 +89,7 @@ export function CharacterSelect({
                 setFocused(false);
               }}
             >
-              <img src={`/stock_icons/${slug}.png`} alt={slug} className="h-10 w-10 object-contain" />
+              <img src={`${import.meta.env.BASE_URL}stock_icons/${slug}.png`} alt={slug} className="h-10 w-10 object-contain" />
               <span className="flex-1 text-base text-current truncate">{slugToLabel(slug)}</span>
               {value === slug && <Check className="h-5 w-5 text-success" />}
             </button>

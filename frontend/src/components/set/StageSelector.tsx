@@ -15,16 +15,20 @@ interface StageSelectorProps {
   p2Name?: string;
 }
 
+const assetBase = import.meta.env.BASE_URL.endsWith('/')
+  ? import.meta.env.BASE_URL
+  : `${import.meta.env.BASE_URL}/`;
+
 const STAGE_IMAGES: Record<StageName, string> = {
-  Battlefield: '/stages/battlefield.png',
-  'Small Battlefield': '/stages/smallbattlefield.jpg',
-  'Final Destination': '/stages/finaldestination.jpg',
-  'Pokemon Stadium 2': '/stages/pokemonstadium2.png',
-  Smashville: '/stages/smashville.png',
-  'Town and City': '/stages/townandcity.png',
-  'Kalos Pokemon League': '/stages/kalos.png',
-  'Hollow Bastion': '/stages/hollowbastion.jpg',
-  "Yoshi's Story": '/stages/yoshistory.png',
+  Battlefield: `${assetBase}stages/battlefield.png`,
+  'Small Battlefield': `${assetBase}stages/smallbattlefield.jpg`,
+  'Final Destination': `${assetBase}stages/finaldestination.jpg`,
+  'Pokemon Stadium 2': `${assetBase}stages/pokemonstadium2.png`,
+  Smashville: `${assetBase}stages/smashville.png`,
+  'Town and City': `${assetBase}stages/townandcity.png`,
+  'Kalos Pokemon League': `${assetBase}stages/kalos.png`,
+  'Hollow Bastion': `${assetBase}stages/hollowbastion.jpg`,
+  "Yoshi's Story": `${assetBase}stages/yoshistory.png`,
 };
 
 export function StageSelector({
