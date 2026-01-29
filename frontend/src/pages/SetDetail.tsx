@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useMemo, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AppLayout } from '@/components/layouts/AppLayout';
@@ -19,6 +19,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 export default function SetDetail() {
   const { setId } = useParams<{ setId: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
 
   const { user } = useAuth();
@@ -99,6 +100,7 @@ export default function SetDetail() {
   const reportStatus = setDetail?.existingReport?.status;
   const lockedByReport = reportStatus === 'pending' || reportStatus === 'approved';
   const rejectedReport = reportStatus === 'rejected';
+  const editRequested = searchParams.get('edit') === '1';
 
   const effectiveBestOf = setDetail?.bestOf ?? 3;
   const score = useMemo(() => calculateScore(games), [games]);
@@ -130,6 +132,12 @@ export default function SetDetail() {
       setIsEditingRejected(false);
     }
   }, [rejectedReport]);
+
+  useEffect(() => {
+    if (rejectedReport && editRequested && isParticipant && !isEditingRejected) {
+      resetForRejectedEdit();
+    }
+  }, [editRequested, isEditingRejected, isParticipant, rejectedReport]);
 
   if (isLoading) {
     return (

@@ -212,7 +212,9 @@ export default function EventDetail() {
                         </div>
                       ) : userOwnsSet && (set.status === 'in_progress' || set.status === 'rejected') ? (
                         <Button
-                          onClick={() => navigate(`/sets/${set.id}?mode=player`)}
+                          onClick={() =>
+                            navigate(`/sets/${set.id}?mode=player${set.status === 'rejected' ? '&edit=1' : ''}`)
+                          }
                           className="w-full"
                         >
                           {set.status === 'rejected' ? 'Editar Reporte' : 'Reportar Set'}
