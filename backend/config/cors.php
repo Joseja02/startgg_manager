@@ -11,7 +11,7 @@ return [
     'allowed_methods' => ['*'],
 
     'allowed_origins' => array_filter([
-        env('FRONTEND_URL', 'https://startgg-manager-frontend-production.up.railway.app:8080'),
+        env('FRONTEND_URL', 'https://joseja02.github.io'),
         // Permitir localhost en desarrollo local
         env('APP_ENV') === 'local' ? 'http://localhost:8080' : null,
     ]),

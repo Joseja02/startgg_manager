@@ -19,8 +19,8 @@ class StartggController extends Controller
      */
     private function getFrontendUrl(): string
     {
-        $origin = env('FRONTEND_URL', 'https://startgg-manager-frontend-production.up.railway.app:8080');
-        $basePath = env('FRONTEND_BASE_PATH', '');
+        $origin = env('FRONTEND_URL', 'https://joseja02.github.io');
+        $basePath = env('FRONTEND_BASE_PATH', '/startgg_manager');
         return rtrim($origin, '/') . $basePath;
     }
 

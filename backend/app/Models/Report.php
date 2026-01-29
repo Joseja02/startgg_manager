@@ -28,7 +28,7 @@ class Report extends Model
 
     protected $casts = [
         'event_id' => 'integer',
-        'set_id' => 'integer',
+        'set_id' => 'string',
         'best_of' => 'integer',
         'p1_entrant_id' => 'integer',
         'p2_entrant_id' => 'integer',

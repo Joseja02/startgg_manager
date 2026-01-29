@@ -4,10 +4,16 @@ import path from "path";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
-  base: mode === 'production' ? '/StartGG-Manager/' : '/',
+  base: mode === 'production' ? '/startgg_manager/' : '/',
   server: {
     host: "::",
     port: 8080,
+  },
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: './src/test/setup.ts',
+    css: true,
   },
   plugins: [react()],
   resolve: {
