@@ -267,6 +267,7 @@ class StartggClient
             name
             slug
             startAt
+            isAdmin
             videogame {
               id
               name
