@@ -11,7 +11,8 @@ import { LocalRps } from '@/components/set/LocalRps';
 import { competitorApi } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { GameRecord, calculateScore, StageName } from '@/types';
-import { ArrowLeft, Send, Users } from 'lucide-react';
+import { ArrowLeft, Send, Users, Save, CheckCircle2 } from 'lucide-react';
+import { useDebounce } from '@/hooks/useDebounce';
 import { toast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -34,6 +35,9 @@ export default function SetDetail() {
   const [openSections, setOpenSections] = useState<string[]>(['bans-1', 'game-1']);
   const currentGame = games[games.length - 1];
   const [isEditingRejected, setIsEditingRejected] = useState(false);
+  const [isDraftLoading, setIsDraftLoading] = useState(true);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const { data: setDetail, isLoading } = useQuery({
     queryKey: ['setDetail', setId],
@@ -41,25 +45,89 @@ export default function SetDetail() {
     enabled: !!setId,
   });
 
+  const isParticipant =
+    !!user &&
+    (String(user.startgg_user_id) === String(setDetail?.p1?.userId) ||
+      String(user.startgg_user_id) === String(setDetail?.p2?.userId));
+
   // Sincronizar estado inicial con reporte existente (si lo hay) o con datos del servidor
   useEffect(() => {
     if (!setDetail) return;
 
-    if (setDetail.existingReport && setDetail.existingReport.games?.length > 0) {
-      const reportGames = setDetail.existingReport.games.map((g) => ({
-        index: g.index,
-        stage: g.stage,
-        winner: g.winner,
-        stocksP1: g.stocksP1,
-        stocksP2: g.stocksP2,
-        characterP1: g.characterP1,
-        characterP2: g.characterP2,
-      } as GameRecord));
-      setGames(reportGames);
-    } else if (setDetail.games?.length > 0) {
-      setGames(setDetail.games);
-    }
-  }, [setDetail]);
+    const initialize = async () => {
+      // 1. Logic from original useEffect: Sync with existing report or server data
+      let initialGames: GameRecord[] = [];
+      if (setDetail.existingReport && setDetail.existingReport.games?.length > 0) {
+        initialGames = setDetail.existingReport.games.map((g) => ({
+          index: g.index,
+          stage: g.stage,
+          winner: g.winner,
+          stocksP1: g.stocksP1,
+          stocksP2: g.stocksP2,
+          characterP1: g.characterP1,
+          characterP2: g.characterP2,
+        } as GameRecord));
+      } else if (setDetail.games?.length > 0) {
+        initialGames = setDetail.games;
+      } else {
+        initialGames = [{ index: 1, stage: null, winner: null, stocksP1: null, stocksP2: null }];
+      }
+
+      // 2. Draft Loading Logic (Overrides partial server data if draft exists)
+      const shouldCheckDraft = setDetail.status === 'in_progress' && isParticipant && !setDetail.existingReport;
+
+      if (shouldCheckDraft) {
+        try {
+          const draft = await competitorApi.getSetDraft(setId!);
+          if (draft && draft.data) {
+            const d = draft.data;
+            if (d.games && d.games.length > 0) initialGames = d.games;
+            if (d.bansByGame) setBansByGame(d.bansByGame);
+            if (d.rpsWinner) setRpsWinner(d.rpsWinner);
+            if (d.rpsMode) setRpsMode(d.rpsMode);
+            toast({
+              title: 'Borrador cargado',
+              description: 'Se ha restaurado tu progreso anterior',
+              duration: 3000,
+            });
+          }
+        } catch (error) {
+          console.error('Error loading draft:', error);
+        }
+      }
+
+      setGames(initialGames);
+      setIsDraftLoading(false);
+    };
+
+    initialize();
+  }, [setDetail, setId, isParticipant]);
+
+  // Auto-Save Logic
+  const stateToSave = { games, bansByGame, rpsWinner, rpsMode };
+  const debouncedState = useDebounce(stateToSave, 2000);
+
+  useEffect(() => {
+    if (isDraftLoading || !setDetail || !isParticipant || setDetail.status !== 'in_progress' || !!setDetail.existingReport) return;
+
+    // Prevent saving if state is essentially empty/default (optional but good)
+    const isDefault = games.length === 1 && !games[0].winner && !rpsWinner;
+    if (isDefault) return;
+
+    const saveDraft = async () => {
+      setIsSaving(true);
+      try {
+        await competitorApi.postSetDraft(setId!, debouncedState);
+        setLastSaved(new Date());
+      } catch (error) {
+        console.error('Error saving draft:', error);
+      } finally {
+        setIsSaving(false);
+      }
+    };
+
+    saveDraft();
+  }, [debouncedState, setId, isDraftLoading, setDetail, isParticipant]);
 
   const submitMutation = useMutation({
     mutationFn: (data: { games: GameRecord[] }) => competitorApi.submitReport(setId!, data),
@@ -89,10 +157,6 @@ export default function SetDetail() {
     });
   }, [currentGame.index]);
 
-  const isParticipant =
-    !!user &&
-    (String(user.startgg_user_id) === String(setDetail?.p1?.userId) ||
-      String(user.startgg_user_id) === String(setDetail?.p2?.userId));
   const isAdminFromSet = !!setDetail?.isAdmin;
   const isAdminUser = user?.role === 'admin';
   const canViewSet = isAdminFromSet || isParticipant || isAdminUser;
@@ -144,7 +208,22 @@ export default function SetDetail() {
   if (isLoading) {
     return (
       <AppLayout>
-        <Skeleton className="h-96" />
+        <div className="space-y-4">
+          <Skeleton className="h-48 w-full" />
+          <Skeleton className="h-96 w-full" />
+        </div>
+      </AppLayout>
+    );
+  }
+
+  // Blocking render until draft check is done, to avoid state jump
+  if (isDraftLoading && setDetail?.status === 'in_progress' && isParticipant) {
+    return (
+      <AppLayout>
+        <div className="space-y-4">
+          <Skeleton className="h-48 w-full" />
+          <Skeleton className="h-96 w-full" />
+        </div>
       </AppLayout>
     );
   }
@@ -388,202 +467,220 @@ export default function SetDetail() {
           </div>
         </div>
 
-        {rejectedReport && (
-          <Card className="border-destructive/40">
-            <CardHeader>
-              <CardTitle>Reporte rechazado</CardTitle>
-              <CardDescription>
-                El admin rechazó el reporte anterior. Corrige la información y envía uno nuevo.
-              </CardDescription>
-            </CardHeader>
-            {setDetail.existingReport?.rejectionReason && (
-              <CardContent className="text-sm text-destructive">
-                Motivo: {setDetail.existingReport.rejectionReason}
-              </CardContent>
-            )}
-            {isParticipant && !isEditingRejected && (
-              <CardContent>
-                <Button className="w-full" onClick={resetForRejectedEdit}>
-                  Editar reporte
-                </Button>
-              </CardContent>
-            )}
-          </Card>
+        {/* Draft Status Indicator */}
+        {canPlayerWorkflow && (
+          <div className="flex items-center justify-end gap-2 text-xs text-muted-foreground mt-1 px-1">
+            {isSaving ? (
+              <>
+                <Save className="h-3 w-3 animate-pulse" />
+                <span>Guardando...</span>
+              </>
+            ) : lastSaved ? (
+              <>
+                <CheckCircle2 className="h-3 w-3 text-green-500" />
+                <span>Guardado {lastSaved.toLocaleTimeString()}</span>
+              </>
+            ) : null}
+          </div>
         )}
+      </div>
 
-        {canPlayerWorkflow ? (
-          <>
-            {!rpsWinner && !isEditingRejectedFlow && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Comenzar set</CardTitle>
-                  <CardDescription>Usa RPS local en este dispositivo para decidir quién banea primero.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {!rpsMode && (
-                    <Button onClick={() => setRpsMode('local')} className="w-full gap-2">
-                      <Users className="h-4 w-4" />
-                      Iniciar Piedra, Papel o Tijeras
-                    </Button>
-                  )}
-                  {rpsMode === 'local' && (
-                    <LocalRps
-                      p1Name={setDetail.p1.name}
-                      p2Name={setDetail.p2.name}
-                      onComplete={handleRpsComplete}
-                    />
-                  )}
-                </CardContent>
-              </Card>
-            )}
+      {rejectedReport && (
+        <Card className="border-destructive/40">
+          <CardHeader>
+            <CardTitle>Reporte rechazado</CardTitle>
+            <CardDescription>
+              El admin rechazó el reporte anterior. Corrige la información y envía uno nuevo.
+            </CardDescription>
+          </CardHeader>
+          {setDetail.existingReport?.rejectionReason && (
+            <CardContent className="text-sm text-destructive">
+              Motivo: {setDetail.existingReport.rejectionReason}
+            </CardContent>
+          )}
+          {isParticipant && !isEditingRejected && (
+            <CardContent>
+              <Button className="w-full" onClick={resetForRejectedEdit}>
+                Editar reporte
+              </Button>
+            </CardContent>
+          )}
+        </Card>
+      )}
 
-            <Accordion type="multiple" value={openSections} onValueChange={setOpenSections} className="space-y-3">
-              {games.map((game, idx) => {
-                const bans = bansByGame[game.index] || [];
-                const flow = getStageFlow(game);
-                const isCurrent = game.index === currentGame.index;
-                const showRepeat = isCurrent && !!game.stage;
+      {canPlayerWorkflow ? (
+        <>
+          {!rpsWinner && !isEditingRejectedFlow && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Comenzar set</CardTitle>
+                <CardDescription>Usa RPS local en este dispositivo para decidir quién banea primero.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {!rpsMode && (
+                  <Button onClick={() => setRpsMode('local')} className="w-full gap-2">
+                    <Users className="h-4 w-4" />
+                    Iniciar Piedra, Papel o Tijeras
+                  </Button>
+                )}
+                {rpsMode === 'local' && (
+                  <LocalRps
+                    p1Name={setDetail.p1.name}
+                    p2Name={setDetail.p2.name}
+                    onComplete={handleRpsComplete}
+                  />
+                )}
+              </CardContent>
+            </Card>
+          )}
 
-                return (
-                  <React.Fragment key={game.index}>
-                    {!isEditingRejectedFlow && (
-                      <AccordionItem value={`bans-${game.index}`} className="border rounded-lg px-4">
-                        <AccordionTrigger className="text-lg font-semibold">
-                          <div className="flex items-center gap-2">
-                            <span>Bans Game {game.index}</span>
-                            {flow.banner && (
-                              <span className="text-xs text-muted-foreground">Turno: {flow.banner === 'p1' ? setDetail.p1.name : setDetail.p2.name}</span>
-                            )}
-                            {flow.mode === 'ban' && <span className="text-xs text-muted-foreground">({flow.bansRemaining} bans restantes)</span>}
-                          </div>
-                        </AccordionTrigger>
-                        <AccordionContent>
-                          <div className="space-y-3 pt-1">
-                            <StageSelector
-                              bannedStages={bans}
-                              pickedStage={game.stage}
-                              mode={flow.mode}
-                              bansRemaining={flow.bansRemaining}
-                              busy={banInProgress && isCurrent}
-                              onBan={handleBan(game.index)}
-                              onPick={flow.mode === 'pick' && isCurrent ? handlePick : (_stage) => {}}
-                              currentBanner={flow.banner}
-                              p1Name={setDetail.p1.name}
-                              p2Name={setDetail.p2.name}
-                            />
+          <Accordion type="multiple" value={openSections} onValueChange={setOpenSections} className="space-y-3">
+            {games.map((game, idx) => {
+              const bans = bansByGame[game.index] || [];
+              const flow = getStageFlow(game);
+              const isCurrent = game.index === currentGame.index;
+              const showRepeat = isCurrent && !!game.stage;
 
-                            {showRepeat && (
-                              <Button variant="outline" className="w-full" onClick={handleRepeatBans}>
-                                Repetir bans de este game
-                              </Button>
-                            )}
-
-                          </div>
-                        </AccordionContent>
-                      </AccordionItem>
-                    )}
-
-                    <AccordionItem value={`game-${game.index}`} className="border rounded-lg px-4">
+              return (
+                <React.Fragment key={game.index}>
+                  {!isEditingRejectedFlow && (
+                    <AccordionItem value={`bans-${game.index}`} className="border rounded-lg px-4">
                       <AccordionTrigger className="text-lg font-semibold">
                         <div className="flex items-center gap-2">
-                          <span>Game {game.index}</span>
-                          {game.stage && <span className="text-xs text-muted-foreground">{game.stage}</span>}
+                          <span>Bans Game {game.index}</span>
+                          {flow.banner && (
+                            <span className="text-xs text-muted-foreground">Turno: {flow.banner === 'p1' ? setDetail.p1.name : setDetail.p2.name}</span>
+                          )}
+                          {flow.mode === 'ban' && <span className="text-xs text-muted-foreground">({flow.bansRemaining} bans restantes)</span>}
                         </div>
                       </AccordionTrigger>
                       <AccordionContent>
-                        <div className="pt-1">
-                          <GameRow
-                            game={game}
+                        <div className="space-y-3 pt-1">
+                          <StageSelector
+                            bannedStages={bans}
+                            pickedStage={game.stage}
+                            mode={flow.mode}
+                            bansRemaining={flow.bansRemaining}
+                            busy={banInProgress && isCurrent}
+                            onBan={handleBan(game.index)}
+                            onPick={flow.mode === 'pick' && isCurrent ? handlePick : (_stage) => { }}
+                            currentBanner={flow.banner}
                             p1Name={setDetail.p1.name}
                             p2Name={setDetail.p2.name}
-                            onChange={handleGameChange}
-                            readonly={!isEditingRejectedFlow && idx < games.length - 1}
-                            lockStage={!isEditingRejectedFlow}
                           />
+
+                          {showRepeat && (
+                            <Button variant="outline" className="w-full" onClick={handleRepeatBans}>
+                              Repetir bans de este game
+                            </Button>
+                          )}
+
                         </div>
                       </AccordionContent>
                     </AccordionItem>
-                  </React.Fragment>
-                );
-              })}
-            </Accordion>
+                  )}
 
-            <Button
-              onClick={handleSubmit}
-              disabled={!canSubmit() || submitMutation.isPending}
-              className="w-full bg-gradient-primary py-6 text-lg"
-              size="lg"
-            >
-              <Send className="mr-2 h-5 w-5" />
-              {submitMutation.isPending ? 'Enviando...' : 'Enviar Reporte para Revisión'}
-            </Button>
-          </>
-        ) : (
-          <>
-            {!canViewSet ? (
-              <div className="text-center py-6">
-                <p className="text-muted-foreground">No tienes permisos para ver este set.</p>
-              </div>
-            ) : (
-              <>
-                {setDetail.status === 'not_started' && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Set sin iniciar</CardTitle>
-                      <CardDescription>
-                        Este set aún no ha sido marcado como iniciado. El admin puede iniciarlo desde la lista del evento.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <Button className="w-full" variant="outline" onClick={() => navigate(`/events/${setDetail.eventId}`)}>
-                        Volver al evento
-                      </Button>
-                    </CardContent>
-                  </Card>
-                )}
+                  <AccordionItem value={`game-${game.index}`} className="border rounded-lg px-4">
+                    <AccordionTrigger className="text-lg font-semibold">
+                      <div className="flex items-center gap-2">
+                        <span>Game {game.index}</span>
+                        {game.stage && <span className="text-xs text-muted-foreground">{game.stage}</span>}
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <div className="pt-1">
+                        <GameRow
+                          game={game}
+                          p1Name={setDetail.p1.name}
+                          p2Name={setDetail.p2.name}
+                          onChange={handleGameChange}
+                          readonly={!isEditingRejectedFlow && idx < games.length - 1}
+                          lockStage={!isEditingRejectedFlow}
+                        />
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                </React.Fragment>
+              );
+            })}
+          </Accordion>
 
-                {setDetail.status !== 'not_started' && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>
-                        {setDetail.status === 'in_progress' ? 'Vista de solo lectura' : 'Resultados'}
-                      </CardTitle>
-                      <CardDescription>
-                        {isParticipant
-                          ? 'Para reportar, entra al modo Progreso desde la lista del evento.'
-                          : 'Aquí puedes ver el estado y los games del set.'}
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      {readonlyGames.length > 0 ? (
-                        <div className="space-y-3">
-                          {readonlyGames.map((game) => (
-                            <GameRow
-                              key={game.index}
-                              game={game}
-                              p1Name={setDetail.p1.name}
-                              p2Name={setDetail.p2.name}
-                              onChange={() => {}}
-                              readonly={true}
-                              lockStage={false}
-                            />
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-sm text-muted-foreground">No hay games disponibles para mostrar.</p>
-                      )}
+          <Button
+            onClick={handleSubmit}
+            disabled={!canSubmit() || submitMutation.isPending}
+            className="w-full bg-gradient-primary py-6 text-lg"
+            size="lg"
+          >
+            <Send className="mr-2 h-5 w-5" />
+            {submitMutation.isPending ? 'Enviando...' : 'Enviar Reporte para Revisión'}
+          </Button>
+        </>
+      ) : (
+        <>
+          {!canViewSet ? (
+            <div className="text-center py-6">
+              <p className="text-muted-foreground">No tienes permisos para ver este set.</p>
+            </div>
+          ) : (
+            <>
+              {setDetail.status === 'not_started' && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Set sin iniciar</CardTitle>
+                    <CardDescription>
+                      Este set aún no ha sido marcado como iniciado. El admin puede iniciarlo desde la lista del evento.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Button className="w-full" variant="outline" onClick={() => navigate(`/events/${setDetail.eventId}`)}>
+                      Volver al evento
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
 
-                      <Button className="w-full" variant="outline" onClick={() => navigate(`/events/${setDetail.eventId}`)}>
-                        Volver al evento
-                      </Button>
-                    </CardContent>
-                  </Card>
-                )}
-              </>
-            )}
-          </>
-        )}
-      </div>
-    </AppLayout>
+              {setDetail.status !== 'not_started' && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>
+                      {setDetail.status === 'in_progress' ? 'Vista de solo lectura' : 'Resultados'}
+                    </CardTitle>
+                    <CardDescription>
+                      {isParticipant
+                        ? 'Para reportar, entra al modo Progreso desde la lista del evento.'
+                        : 'Aquí puedes ver el estado y los games del set.'}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {readonlyGames.length > 0 ? (
+                      <div className="space-y-3">
+                        {readonlyGames.map((game) => (
+                          <GameRow
+                            key={game.index}
+                            game={game}
+                            p1Name={setDetail.p1.name}
+                            p2Name={setDetail.p2.name}
+                            onChange={() => { }}
+                            readonly={true}
+                            lockStage={false}
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No hay games disponibles para mostrar.</p>
+                    )}
+
+                    <Button className="w-full" variant="outline" onClick={() => navigate(`/events/${setDetail.eventId}`)}>
+                      Volver al evento
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          )}
+        </>
+      )}
+    </div>
+    </AppLayout >
   );
 }
