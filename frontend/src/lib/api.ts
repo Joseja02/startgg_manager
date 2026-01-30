@@ -62,7 +62,7 @@ export const competitorApi = {
 
 // Admin
 export const adminApi = {
-  getReports: (params?: { status?: string }) =>
+  getReports: (params?: { status?: string; eventId?: string | number }) =>
     api.get<ReportSummary[]>('/admin/reports', { params }).then(res => res.data),
   getReportDetail: (reportId: string | number) =>
     api.get<ReportDetail>(`/admin/reports/${reportId}`).then(res => res.data),

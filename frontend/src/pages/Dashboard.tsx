@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Calendar, Trophy, Play, ShieldCheck, RefreshCw } from 'lucide-react';
@@ -21,13 +22,19 @@ export default function Dashboard() {
 
   const activeEvents = events?.filter((event) => event.status === 'active') || [];
   const upcomingEvents = events?.filter((event) => event.status === 'upcoming') || [];
+  const adminEvents = activeEvents.filter((event) => event.isAdmin);
 
   const isAdmin = user?.role === 'admin';
+  const adminEventId = useMemo(() => {
+    const fromStorage = sessionStorage.getItem('admin_event_id');
+    if (fromStorage) return fromStorage;
+    return adminEvents[0]?.id ? String(adminEvents[0].id) : '';
+  }, [adminEvents]);
 
   const { data: pendingReports, isLoading: pendingReportsLoading } = useQuery({
-    queryKey: ['adminPendingReports'],
-    queryFn: () => adminApi.getReports({ status: 'pending' }),
-    enabled: !!isAdmin,
+    queryKey: ['adminPendingReports', adminEventId],
+    queryFn: () => adminApi.getReports({ status: 'pending', eventId: adminEventId }),
+    enabled: !!isAdmin && !!adminEventId,
   });
 
   return (
@@ -61,7 +68,14 @@ export default function Dashboard() {
               <ShieldCheck className="w-5 h-5 text-primary" />
               Reportes pendientes
             </h2>
-            {pendingReportsLoading ? (
+            {!adminEventId ? (
+              <Card className="border-dashed">
+                <CardContent className="flex flex-col items-center justify-center py-6">
+                  <Trophy className="w-8 h-8 text-muted-foreground mb-2" />
+                  <p className="text-sm text-muted-foreground">Selecciona un evento admin para ver reportes</p>
+                </CardContent>
+              </Card>
+            ) : pendingReportsLoading ? (
               <Skeleton className="h-24" />
             ) : !pendingReports || pendingReports.length === 0 ? (
               <Card className="border-dashed">
@@ -77,7 +91,14 @@ export default function Dashboard() {
                     <CardTitle className="text-base">
                       {pendingReports.length} por revisar
                     </CardTitle>
-                    <Button variant="ghost" size="sm" onClick={() => navigate('/admin/reports')}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        sessionStorage.setItem('admin_event_id', adminEventId);
+                        navigate(`/admin/reports?eventId=${adminEventId}`);
+                      }}
+                    >
                       Ver todos
                     </Button>
                   </div>
@@ -86,7 +107,12 @@ export default function Dashboard() {
                   {pendingReports.slice(0, 2).map((report) => (
                     <button
                       key={report.id}
-                      onClick={() => navigate(`/admin/reports/${report.id}`)}
+                      onClick={() => {
+                        if (adminEventId) {
+                          sessionStorage.setItem('admin_event_id', adminEventId);
+                        }
+                        navigate(`/admin/reports/${report.id}${adminEventId ? `?eventId=${adminEventId}` : ''}`);
+                      }}
                       className="w-full text-left p-3 rounded-lg border border-border hover:border-primary/50 transition-all active:scale-[0.98]"
                     >
                       <p className="text-sm font-medium truncate">{report.round}</p>

@@ -47,6 +47,12 @@ export default function EventDetail() {
     }
   }, [adminCheck?.isAdmin, queryClient, user?.role]);
 
+  useEffect(() => {
+    if (event?.isAdmin && eventId) {
+      sessionStorage.setItem('admin_event_id', eventId);
+    }
+  }, [event?.isAdmin, eventId]);
+
   const startSetMutation = useMutation({
     mutationFn: ({ setId, bestOf }: { setId: string | number; bestOf: 3 | 5 }) =>
       competitorApi.startSet(setId, bestOf),

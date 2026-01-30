@@ -312,7 +312,14 @@ export default function SetPage() {
           </Button>
           <Button
             variant="outline"
-            onClick={() => navigate('/admin/reports')}
+            onClick={() => {
+              if (setDetail?.eventId) {
+                sessionStorage.setItem('admin_event_id', String(setDetail.eventId));
+                navigate(`/admin/reports?eventId=${setDetail.eventId}`);
+                return;
+              }
+              navigate('/admin/reports');
+            }}
             title="Ir a reportes"
           >
             Reportes

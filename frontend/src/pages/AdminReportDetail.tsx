@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { Button } from '@/components/ui/button';
@@ -28,6 +28,14 @@ import type { GameRecord } from '@/types';
 export default function AdminReportDetail() {
   const { reportId } = useParams<{ reportId: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const eventId = searchParams.get('eventId') || sessionStorage.getItem('admin_event_id') || '';
+
+  useEffect(() => {
+    if (eventId) {
+      sessionStorage.setItem('admin_event_id', eventId);
+    }
+  }, [eventId]);
   const queryClient = useQueryClient();
   const [rejectionReason, setRejectionReason] = useState('');
   const [isEditing, setIsEditing] = useState(false);
@@ -84,7 +92,7 @@ export default function AdminReportDetail() {
         description: 'El set será enviado a start.gg',
       });
       queryClient.invalidateQueries({ queryKey: ['adminReports'] });
-      setTimeout(() => navigate('/admin/reports'), 1000);
+      setTimeout(() => navigate(eventId ? `/admin/reports?eventId=${eventId}` : '/admin/reports'), 1000);
     },
     onError: () => {
       toast({
@@ -103,7 +111,7 @@ export default function AdminReportDetail() {
         description: 'El competidor será notificado',
       });
       queryClient.invalidateQueries({ queryKey: ['adminReports'] });
-      setTimeout(() => navigate('/admin/reports'), 1000);
+      setTimeout(() => navigate(eventId ? `/admin/reports?eventId=${eventId}` : '/admin/reports'), 1000);
     },
     onError: () => {
       toast({
@@ -131,7 +139,11 @@ export default function AdminReportDetail() {
       <AppLayout>
         <div className="text-center py-10">
           <p className="text-muted-foreground">Reporte no encontrado</p>
-          <Button variant="outline" onClick={() => navigate('/admin/reports')} className="mt-4">
+          <Button
+            variant="outline"
+            onClick={() => navigate(eventId ? `/admin/reports?eventId=${eventId}` : '/admin/reports')}
+            className="mt-4"
+          >
             Volver
           </Button>
         </div>
@@ -163,7 +175,12 @@ export default function AdminReportDetail() {
       <div className="space-y-5">
         {/* Header */}
         <div className="flex items-start gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/admin/reports')} className="shrink-0">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => navigate(eventId ? `/admin/reports?eventId=${eventId}` : '/admin/reports')}
+            className="shrink-0"
+          >
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <div className="min-w-0 flex-1">

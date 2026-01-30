@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AppLayout } from '@/components/layouts/AppLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,10 +14,19 @@ export default function AdminReports() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<'pending' | 'approved' | 'rejected'>('pending');
+  const [searchParams] = useSearchParams();
+  const eventId = searchParams.get('eventId') || sessionStorage.getItem('admin_event_id') || '';
+
+  useEffect(() => {
+    if (eventId) {
+      sessionStorage.setItem('admin_event_id', eventId);
+    }
+  }, [eventId]);
 
   const { data: reports, isLoading } = useQuery({
-    queryKey: ['adminReports', filter],
-    queryFn: () => adminApi.getReports({ status: filter }),
+    queryKey: ['adminReports', filter, eventId],
+    queryFn: () => adminApi.getReports({ status: filter, eventId }),
+    enabled: !!eventId,
   });
 
   const filters = [
@@ -65,7 +74,16 @@ export default function AdminReports() {
         </div>
 
         {/* Reports List */}
-        {isLoading ? (
+        {!eventId ? (
+          <Card className="border-dashed">
+            <CardContent className="flex flex-col items-center justify-center py-10">
+              <AlertCircle className="w-10 h-10 text-muted-foreground mb-3" />
+              <p className="text-muted-foreground text-center">
+                Selecciona un evento para ver sus reportes
+              </p>
+            </CardContent>
+          </Card>
+        ) : isLoading ? (
           <div className="space-y-3">
             <Skeleton className="h-32" />
             <Skeleton className="h-32" />
@@ -123,7 +141,7 @@ export default function AdminReports() {
                   </div>
 
                   <Button
-                    onClick={() => navigate(`/admin/reports/${report.id}`)}
+                    onClick={() => navigate(`/admin/reports/${report.id}${eventId ? `?eventId=${eventId}` : ''}`)}
                     className={cn('w-full', filter === 'pending' ? '' : 'bg-muted text-foreground hover:bg-muted/80')}
                     variant={filter === 'pending' ? 'default' : 'outline'}
                   >

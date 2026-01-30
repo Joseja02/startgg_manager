@@ -7,12 +7,13 @@ use Illuminate\Support\Facades\Auth;
 use App\Models\Report;
 use App\Models\Game;
 use App\Services\StartggClient;
+use App\Services\StartggAppClient;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 
 class ReportController extends Controller
 {
-    public function __construct(private StartggClient $client) {}
+    public function __construct(private StartggClient $client, private StartggAppClient $appClient) {}
 
     /**
      * Listar reportes (admin)
@@ -20,7 +21,18 @@ class ReportController extends Controller
      */
     public function index(Request $request)
     {
+        $user = Auth::user();
+        $eventId = $request->query('eventId');
+        if (!$eventId) {
+            return response()->json(['error' => 'eventId is required'], 400);
+        }
+
+        if (!$this->isEventAdmin($user, $eventId)) {
+            return response()->json(['error' => 'Forbidden. Not an admin of this event.'], 403);
+        }
+
         $query = Report::with(['user', 'games'])
+            ->where('event_id', $eventId)
             ->orderBy('created_at', 'desc');
 
         // Filtrar por estado
@@ -61,6 +73,10 @@ class ReportController extends Controller
     public function show($reportId)
     {
         $report = Report::with(['user', 'games'])->findOrFail($reportId);
+        $user = Auth::user();
+        if (!$this->isEventAdmin($user, $report->event_id)) {
+            return response()->json(['error' => 'Forbidden. Not an admin of this event.'], 403);
+        }
 
         $reportDetail = [
             'id' => $report->id,
@@ -107,6 +123,10 @@ class ReportController extends Controller
     public function update(Request $request, $reportId)
     {
         $report = Report::with('games')->findOrFail($reportId);
+        $user = Auth::user();
+        if (!$this->isEventAdmin($user, $report->event_id)) {
+            return response()->json(['error' => 'Forbidden. Not an admin of this event.'], 403);
+        }
 
         // Permitir editar reportes pending o rejected (admin puede arreglar y reenviar)
         if (!in_array($report->status, ['pending', 'rejected'], true)) {
@@ -175,6 +195,9 @@ class ReportController extends Controller
     {
         $user = Auth::user();
         $report = Report::with('games')->findOrFail($reportId);
+        if (!$this->isEventAdmin($user, $report->event_id)) {
+            return response()->json(['error' => 'Forbidden. Not an admin of this event.'], 403);
+        }
 
         if ($report->status !== 'pending') {
             return response()->json([
@@ -228,6 +251,10 @@ class ReportController extends Controller
         ]);
 
         $report = Report::findOrFail($reportId);
+        $user = Auth::user();
+        if (!$this->isEventAdmin($user, $report->event_id)) {
+            return response()->json(['error' => 'Forbidden. Not an admin of this event.'], 403);
+        }
 
         if ($report->status !== 'pending') {
             return response()->json([
@@ -241,6 +268,44 @@ class ReportController extends Controller
             'message' => 'Report rejected',
             'report' => $report,
         ]);
+    }
+
+    private function isEventAdmin($user, $eventId): bool
+    {
+        if (!$user?->startgg_user_id) {
+            return false;
+        }
+
+        try {
+            $event = $this->client->getEvent($user, $eventId);
+            if (!empty($event['isAdminEvent'])) {
+                return true;
+            }
+
+            $slug = data_get($event, 'tournamentSlug') ?? data_get($event, 'tournamentName');
+            if (!$slug) {
+                return false;
+            }
+
+            $info = $this->appClient->getTournamentAdminInfo($slug);
+            $ownerId = $info['ownerId'] ?? null;
+            $adminIds = collect($info['adminUserIds'] ?? [])
+                ->map(fn ($id) => (string) $id)
+                ->filter()
+                ->values()
+                ->all();
+
+            $startggUserId = (string) $user->startgg_user_id;
+            return ($ownerId && (string) $ownerId === $startggUserId)
+                || collect($adminIds)->contains(fn ($id) => (string) $id === $startggUserId);
+        } catch (\Throwable $e) {
+            Log::warning('report admin check failed', [
+                'event_id' => $eventId,
+                'user_id' => $user->id,
+                'error' => $e->getMessage(),
+            ]);
+            return false;
+        }
     }
 }
 
