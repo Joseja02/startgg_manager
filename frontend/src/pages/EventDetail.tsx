@@ -61,7 +61,12 @@ export default function EventDetail() {
         title: 'Set iniciado',
         description: 'El set ha sido marcado como en progreso',
       });
-      refetchSets();
+      if (eventId) {
+        queryClient.fetchQuery({
+          queryKey: ['eventSets', eventId],
+          queryFn: () => competitorApi.getEventSets(eventId, { fresh: 1 }),
+        });
+      }
       setPendingStartSetId(null);
     },
     onError: () => {
@@ -138,7 +143,17 @@ export default function EventDetail() {
         <section className="space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-display">Sets</h2>
-            <Button variant="ghost" size="sm" onClick={() => refetchSets()}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                if (!eventId) return;
+                queryClient.fetchQuery({
+                  queryKey: ['eventSets', eventId],
+                  queryFn: () => competitorApi.getEventSets(eventId, { fresh: 1 }),
+                });
+              }}
+            >
               <RefreshCw className="w-4 h-4" />
             </Button>
           </div>

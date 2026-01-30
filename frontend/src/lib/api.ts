@@ -49,7 +49,7 @@ export const competitorApi = {
     api.get<{ isAdmin: boolean; slug?: string; reason?: string }>(`/events/${eventId}/admin-check`, {
       params: tournamentSlug ? { tournamentSlug } : undefined,
     }).then(res => res.data),
-  getEventSets: (eventId: string | number, params?: { mine?: 1; status?: string }) =>
+  getEventSets: (eventId: string | number, params?: { mine?: 1; status?: string; fresh?: 1 }) =>
     api.get<SetSummary[]>(`/events/${eventId}/sets`, { params }).then(res => res.data),
   getSetDetail: (setId: string | number) => api.get<SetDetail>(`/sets/${setId}`).then(res => res.data),
   startSet: (setId: string | number, bestOf?: 3 | 5) =>

@@ -25,11 +25,12 @@ class EventController extends Controller
         
         $mine = $request->boolean('mine');
         $statusFilter = $request->query('status');
+        $fresh = $request->boolean('fresh');
         $cacheKey = "event_{$eventId}_sets_" . ($mine ? "user_{$user->id}" : 'all');
         $cacheKey .= $statusFilter ? "_status_{$statusFilter}" : '';
         
         try {
-            $sets = Cache::remember($cacheKey, now()->addMinutes(2), function () use ($user, $eventId, $request) {
+            $resolver = function () use ($user, $eventId, $request) {
                 $mine = $request->boolean('mine');
                 $statusFilter = $request->query('status');
 
@@ -95,7 +96,11 @@ class EventController extends Controller
                 }
 
                 return $filteredSets;
-            });
+            };
+
+            $sets = $fresh
+                ? $resolver()
+                : Cache::remember($cacheKey, now()->addSeconds(10), $resolver);
 
             return response()->json($sets);
         } catch (\Throwable $e) {
