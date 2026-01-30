@@ -46,6 +46,6 @@ jobs:
             set -e
             cd /opt/bracketmanager/bracket_manager
             git pull --ff-only
-            rsync -a --delete /opt/bracketmanager/bracket_manager/backend/ /opt/bracketmanager/backend/
+            rsync -a --delete --exclude '.env' --exclude 'storage' --exclude 'bootstrap/cache' /opt/bracketmanager/bracket_manager/backend/ /opt/bracketmanager/backend/
             docker compose -f /opt/bracketmanager/docker-compose.yml up -d --build backend
 
