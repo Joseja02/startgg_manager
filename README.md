@@ -1,4 +1,4 @@
-# StartGG Manager
+# Bracket Manager (by Joseja)
 
 Gestor web para torneos de Smash Ultimate que se conecta a start.gg. Pensado para que organizadores y competidores sigan sus sets de forma sencilla: iniciar partidas, reportar resultados y ver el estado de cada ronda.
 
