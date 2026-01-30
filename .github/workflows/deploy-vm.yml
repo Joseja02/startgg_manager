@@ -20,7 +20,8 @@ jobs:
       - name: Build frontend
         working-directory: frontend
         run: |
-          npm install
+          rm -rf node_modules package-lock.json
+          npm install --force
           npm run build
 
       - name: Upload frontend dist
