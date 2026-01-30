@@ -262,8 +262,10 @@ export default function SetDetail() {
   const getStageFlow = (game: GameRecord) => {
     const bans = bansByGame[game.index] || [];
     const limit = getBanLimit(game.index);
-    const isActive = game.index === currentGame.index && !game.stage && !!rpsWinner;
-    if (!isActive) {
+    // Permitir banear/gentleman si es el game actual, hay rpsWinner, y NO hay bans activos (se reseteó)
+    // O si no hay stage seleccionado aún
+    const canBanOrPick = game.index === currentGame.index && !!rpsWinner && (bans.length === 0 || !game.stage);
+    if (!canBanOrPick) {
       return { mode: 'view' as const, bansRemaining: 0, banner: getBannerForGame(game, bans), limit };
     }
 
@@ -325,17 +327,20 @@ export default function SetDetail() {
 
   const resetBansForGame = (gameIndex: number) => {
     setBansByGame((prev) => ({ ...prev, [gameIndex]: [] }));
-    // si se está usando el flujo de bans, limpiar stage para poder volver a elegir
-    if (!isEditingRejectedFlow) {
-      setGames((prev) => prev.map((g) => (g.index === gameIndex ? { ...g, stage: null } : g)));
-    }
+    // Limpiar stage para permitir volver a banear/gentleman/pick
+    setGames((prev) => prev.map((g) => (g.index === gameIndex ? { ...g, stage: null } : g)));
   };
 
   const handleGameChange = (updatedGame: GameRecord) => {
     const updated = games.map((g) => (g.index === updatedGame.index ? updatedGame : g));
     setGames(updated);
 
-    const isComplete = updatedGame.stage && updatedGame.winner && updatedGame.characterP1 && updatedGame.characterP2;
+    // Validar que el game esté completo: stage, winner, characters Y stocks válidas
+    const hasValidStocks = updatedGame.winner 
+      ? (updatedGame.winner === 'p1' ? (updatedGame.stocksP1 !== null && updatedGame.stocksP1 !== undefined) : (updatedGame.stocksP2 !== null && updatedGame.stocksP2 !== undefined))
+      : true;
+    const isComplete = updatedGame.stage && updatedGame.winner && updatedGame.characterP1 && updatedGame.characterP2 && hasValidStocks;
+    
     if (isComplete && games.length < effectiveBestOf) {
       const newScore = calculateScore(updated);
       const hasWinner = newScore.p1 >= gamesNeeded || newScore.p2 >= gamesNeeded;
@@ -381,7 +386,13 @@ export default function SetDetail() {
 
   const canSubmit = () => {
     const hasWinner = score.p1 >= gamesNeeded || score.p2 >= gamesNeeded;
-    const allGamesComplete = games.every((g) => g.stage && g.winner && g.characterP1 && g.characterP2);
+    // Validar que todos los games tengan todos los campos necesarios, incluyendo stocks válidas
+    const allGamesComplete = games.every((g) => {
+      const hasValidStocks = g.winner 
+        ? (g.winner === 'p1' ? (g.stocksP1 !== null && g.stocksP1 !== undefined) : (g.stocksP2 !== null && g.stocksP2 !== undefined))
+        : true;
+      return g.stage && g.winner && g.characterP1 && g.characterP2 && hasValidStocks;
+    });
     return hasWinner && allGamesComplete;
   };
 
@@ -580,7 +591,8 @@ export default function SetDetail() {
               const flow = getStageFlow(game);
               const isCurrent = game.index === currentGame.index;
               const showRepeat = isCurrent && !!game.stage;
-              const canGentleman = isCurrent && !game.stage && !isEditingRejectedFlow;
+              // Permitir gentleman si es el game actual, hay rpsWinner, y NO hay bans activos (se reseteó) o no hay stage
+              const canGentleman = isCurrent && !!rpsWinner && (bans.length === 0 || !game.stage) && !isEditingRejectedFlow;
               const gConfirm = gentlemanConfirm[game.index] || { p1: false, p2: false };
               const isGentlemanReady = gConfirm.p1 && gConfirm.p2;
 
@@ -656,8 +668,8 @@ export default function SetDetail() {
                           p1Name={setDetail.p1.name}
                           p2Name={setDetail.p2.name}
                           onChange={handleGameChange}
-                          readonly={!isEditingRejectedFlow && idx < games.length - 1}
-                          lockStage={!isEditingRejectedFlow}
+                          readonly={false}
+                          lockStage={!isEditingRejectedFlow && isCurrent && !!rpsWinner && (flow.mode === 'ban' || flow.mode === 'pick')}
                         />
                       </div>
                     </AccordionContent>

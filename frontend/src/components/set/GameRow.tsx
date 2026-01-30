@@ -24,21 +24,27 @@ export function GameRow({ game, p1Name, p2Name, onChange, readonly = false, lock
   const updateGame = (updates: Partial<GameRecord>) => {
     const updated = { ...game, ...updates };
 
-    // Apply stocks constraint
+    // Apply stocks constraint: solo establecer perdedor a 0, NO establecer ganador automáticamente
     if (updates.winner) {
       if (updates.winner === 'p1') {
         updated.stocksP2 = 0;
-        if (!updated.stocksP1) updated.stocksP1 = 1;
+        // NO establecer stocksP1 automáticamente, dejar que el usuario lo seleccione
       } else if (updates.winner === 'p2') {
         updated.stocksP1 = 0;
-        if (!updated.stocksP2) updated.stocksP2 = 1;
+        // NO establecer stocksP2 automáticamente, dejar que el usuario lo seleccione
       }
     }
 
     onChange(updated);
   };
 
-  const isComplete = game.stage && game.winner && game.characterP1 && game.characterP2;
+  // Un game está completo solo si tiene todos los campos necesarios Y stocks válidas
+  // Stocks válidas = (1, 2, 3) o null (unknown), pero NO puede estar sin definir si hay ganador
+  const hasValidStocks = game.winner 
+    ? (game.winner === 'p1' ? (game.stocksP1 !== null && game.stocksP1 !== undefined) : (game.stocksP2 !== null && game.stocksP2 !== undefined))
+    : true; // Si no hay ganador, no se requieren stocks aún
+  
+  const isComplete = game.stage && game.winner && game.characterP1 && game.characterP2 && hasValidStocks;
   const stocksP1Value =
     game.stocksP1 === null ? 'unknown' : (game.stocksP1?.toString() || '');
   const stocksP2Value =
