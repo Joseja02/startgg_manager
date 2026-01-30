@@ -483,7 +483,6 @@ export default function SetDetail() {
             ) : null}
           </div>
         )}
-      </div>
 
       {rejectedReport && (
         <Card className="border-destructive/40">
@@ -681,6 +680,6 @@ export default function SetDetail() {
         </>
       )}
     </div>
-    </AppLayout >
+    </AppLayout>
   );
 }
