@@ -36,7 +36,7 @@ describe('useAuth', () => {
     const { authApi } = await import('@/lib/api');
     vi.mocked(authApi.me).mockResolvedValue({ data: mockUser });
 
-    const wrapper = createWrapper(['/auth/callback?token=abc123']);
+    const wrapper = createWrapper(['/oauth/callback?token=abc123']);
     const { result } = renderHook(() => useAuth(), { wrapper });
 
     await waitFor(() => expect(result.current.isAuthenticated).toBe(true));

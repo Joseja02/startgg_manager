@@ -7,7 +7,7 @@ function renderWithRoute(initialEntry: string) {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
-        <Route path="/auth/callback" element={<AuthCallback />} />
+        <Route path="/oauth/callback" element={<AuthCallback />} />
         <Route path="/dashboard" element={<div>Dashboard</div>} />
         <Route path="/login" element={<div>Login</div>} />
       </Routes>
@@ -17,7 +17,7 @@ function renderWithRoute(initialEntry: string) {
 
 describe('AuthCallback', () => {
   it('redirects to dashboard when token is present', async () => {
-    renderWithRoute('/auth/callback?token=abc123');
+    renderWithRoute('/oauth/callback?token=abc123');
 
     await waitFor(() => {
       expect(screen.getByText('Dashboard')).toBeInTheDocument();
@@ -25,7 +25,7 @@ describe('AuthCallback', () => {
   });
 
   it('redirects to login when error is present', async () => {
-    renderWithRoute('/auth/callback?error=invalid_state');
+    renderWithRoute('/oauth/callback?error=invalid_state');
 
     await waitFor(() => {
       expect(screen.getByText('Login')).toBeInTheDocument();
@@ -33,7 +33,7 @@ describe('AuthCallback', () => {
   });
 
   it('redirects to login when token is missing', async () => {
-    renderWithRoute('/auth/callback');
+    renderWithRoute('/oauth/callback');
 
     await waitFor(() => {
       expect(screen.getByText('Login')).toBeInTheDocument();

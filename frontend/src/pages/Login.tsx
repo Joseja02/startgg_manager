@@ -41,7 +41,9 @@ export default function Login() {
       description: 'Redirigiendo a start.gg',
     });
     const base = import.meta.env.VITE_API_BASE_URL;
-    window.location.href = `${base}/auth/login`;
+    const normalized =
+      !base || base === 'undefined' || base === 'null' ? '' : base;
+    window.location.href = normalized ? `${normalized}/auth/login` : '/auth/login';
   };
 
   const handleAdminLogin = () => {

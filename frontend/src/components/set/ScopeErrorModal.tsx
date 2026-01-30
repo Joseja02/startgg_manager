@@ -19,7 +19,9 @@ export function ScopeErrorModal({ open, onClose, message }: ScopeErrorModalProps
   const baseUrl = import.meta.env.VITE_API_BASE_URL;
 
   const handleReauth = () => {
-    window.location.href = `${baseUrl}/auth/login`;
+    const normalized =
+      !baseUrl || baseUrl === 'undefined' || baseUrl === 'null' ? '' : baseUrl;
+    window.location.href = normalized ? `${normalized}/auth/login` : '/auth/login';
   };
 
   return (

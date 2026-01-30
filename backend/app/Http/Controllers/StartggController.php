@@ -79,7 +79,7 @@ class StartggController extends Controller
             ]);
 
             // Redirect to frontend with an error query param for better UX
-            return redirect()->away(rtrim($frontendUrl, '/') . '/auth/callback?error=invalid_state');
+            return redirect()->away(rtrim($frontendUrl, '/') . '/oauth/callback?error=invalid_state');
         }
 
         $code = $request->query('code');
@@ -90,7 +90,7 @@ class StartggController extends Controller
                 'query' => $request->query(),
             ]);
 
-            return redirect()->away(rtrim($frontendUrl, '/') . '/auth/callback?error=missing_code');
+            return redirect()->away(rtrim($frontendUrl, '/') . '/oauth/callback?error=missing_code');
         }
 
         // Intercambiar authorization code por access token
@@ -110,7 +110,7 @@ class StartggController extends Controller
                 'status' => $tokenResponse->status(),
                 'body' => $tokenResponse->body(),
             ]);
-            return redirect()->away(rtrim($frontendUrl, '/') . '/auth/callback?error=token_exchange_failed');
+            return redirect()->away(rtrim($frontendUrl, '/') . '/oauth/callback?error=token_exchange_failed');
         }
 
         $tokenData = $tokenResponse->json();
@@ -153,7 +153,7 @@ class StartggController extends Controller
                 'headers' => $graphqlResponse->headers(),
                 'endpoint' => $graphqlEndpoint,
             ]);
-            return redirect()->away(rtrim($frontendUrl, '/') . '/auth/callback?error=graphql_failed');
+            return redirect()->away(rtrim($frontendUrl, '/') . '/oauth/callback?error=graphql_failed');
         }
 
         $userData = data_get($graphqlResponse->json(), 'data.currentUser');
@@ -185,6 +185,6 @@ class StartggController extends Controller
         // Redirigir al frontend con el token
         $frontendUrl = $this->getFrontendUrl();
         
-        return redirect()->away(rtrim($frontendUrl, '/') . '/auth/callback?token=' . $apiToken);
+        return redirect()->away(rtrim($frontendUrl, '/') . '/oauth/callback?token=' . $apiToken);
     }
 }

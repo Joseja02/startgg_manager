@@ -2,9 +2,11 @@ import axios from 'axios';
 import type { User, EventSummary, SetSummary, SetDetail, ReportSummary, ReportDetail, GameRecord } from '@/types';
 
 const baseURL = import.meta.env.VITE_API_BASE_URL;
+const normalizedBaseUrl =
+  !baseURL || baseURL === 'undefined' || baseURL === 'null' ? '' : baseURL;
 
 const api = axios.create({
-  baseURL: baseURL ? `${baseURL}/api` : '/api',
+  baseURL: normalizedBaseUrl ? `${normalizedBaseUrl}/api` : '/api',
   withCredentials: true, // CRÍTICO para enviar cookies en requests CORS
   headers: {
     'Content-Type': 'application/json',
@@ -33,7 +35,9 @@ export const authApi = {
   })),
   login: () => {
     const base = import.meta.env.VITE_API_BASE_URL;
-    window.location.href = base ? `${base}/auth/login` : '/auth/login';
+    const normalized =
+      !base || base === 'undefined' || base === 'null' ? '' : base;
+    window.location.href = normalized ? `${normalized}/auth/login` : '/auth/login';
   },
 };
 

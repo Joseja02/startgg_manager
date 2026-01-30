@@ -32,7 +32,7 @@ const AppRoutes = () => (
       <Routes>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/auth/callback" element={<AuthCallback />} />
+        <Route path="/oauth/callback" element={<AuthCallback />} />
         <Route
           path="/dashboard"
           element={
