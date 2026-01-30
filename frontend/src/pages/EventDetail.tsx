@@ -31,6 +31,9 @@ export default function EventDetail() {
     queryKey: ['eventSets', eventId],
     queryFn: () => competitorApi.getEventSets(eventId!),
     enabled: !!eventId,
+    // Mantener la lista lo más sincronizada posible con start.gg sin spamear
+    refetchInterval: 10_000,
+    refetchOnWindowFocus: true,
   });
 
   const { data: adminCheck } = useQuery({

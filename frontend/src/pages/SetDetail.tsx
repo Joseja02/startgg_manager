@@ -16,6 +16,15 @@ import { useDebounce } from '@/hooks/useDebounce';
 import { toast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 export default function SetDetail() {
   const { setId } = useParams<{ setId: string }>();
@@ -38,6 +47,8 @@ export default function SetDetail() {
   const [isDraftLoading, setIsDraftLoading] = useState(true);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [gentlemanGameIndex, setGentlemanGameIndex] = useState<number | null>(null);
+  const [gentlemanConfirm, setGentlemanConfirm] = useState<Record<number, { p1: boolean; p2: boolean }>>({});
 
   const { data: setDetail, isLoading } = useQuery({
     queryKey: ['setDetail', setId],
@@ -185,12 +196,10 @@ export default function SetDetail() {
     setBanInProgress(false);
     setBansByGame({ 1: [] });
     setOpenSections(['bans-1', 'game-1']);
-    setGames((prev) => {
-      if (prev.length === 0) {
-        return [{ index: 1, stage: null, winner: null, stocksP1: null, stocksP2: null }];
-      }
-      return prev.map((game) => ({ ...game, stage: null }));
-    });
+    // Mantener los escenarios ya seleccionados (no resetear stage) para que el jugador solo corrija lo necesario
+    setGames((prev) =>
+      prev.length === 0 ? [{ index: 1, stage: null, winner: null, stocksP1: null, stocksP2: null }] : prev
+    );
   };
 
   useEffect(() => {
@@ -314,6 +323,14 @@ export default function SetDetail() {
     setBansByGame((prev) => ({ ...prev, [currentGame.index]: [] }));
   };
 
+  const resetBansForGame = (gameIndex: number) => {
+    setBansByGame((prev) => ({ ...prev, [gameIndex]: [] }));
+    // si se está usando el flujo de bans, limpiar stage para poder volver a elegir
+    if (!isEditingRejectedFlow) {
+      setGames((prev) => prev.map((g) => (g.index === gameIndex ? { ...g, stage: null } : g)));
+    }
+  };
+
   const handleGameChange = (updatedGame: GameRecord) => {
     const updated = games.map((g) => (g.index === updatedGame.index ? updatedGame : g));
     setGames(updated);
@@ -329,13 +346,37 @@ export default function SetDetail() {
           const nextIndex = updated.length + 1;
           setGames([
             ...updated,
-            { index: nextIndex, stage: null, winner: null, stocksP1: null, stocksP2: null },
+            {
+              index: nextIndex,
+              stage: null,
+              winner: null,
+              stocksP1: null,
+              stocksP2: null,
+              // Mantener selección de personajes por defecto entre games
+              characterP1: lastGame.characterP1,
+              characterP2: lastGame.characterP2,
+            },
           ]);
           setBansByGame((prev) => ({ ...prev, [nextIndex]: [] }));
           setRpsWinner(lastGame.winner || 'p1');
         }
       }
     }
+  };
+
+  const openGentleman = (gameIndex: number) => {
+    setGentlemanGameIndex(gameIndex);
+    setGentlemanConfirm((prev) => ({ ...prev, [gameIndex]: { p1: false, p2: false } }));
+  };
+
+  const closeGentleman = () => setGentlemanGameIndex(null);
+
+  const setGentlemanStage = (gameIndex: number, stage: StageName) => {
+    // Gentleman: elegir stage sin bans
+    setBansByGame((prev) => ({ ...prev, [gameIndex]: [] }));
+    setGames((prev) => prev.map((g) => (g.index === gameIndex ? { ...g, stage } : g)));
+    toast({ title: 'Gentleman confirmado', description: `Game ${gameIndex} se jugará en ${stage}` });
+    closeGentleman();
   };
 
   const canSubmit = () => {
@@ -539,6 +580,9 @@ export default function SetDetail() {
               const flow = getStageFlow(game);
               const isCurrent = game.index === currentGame.index;
               const showRepeat = isCurrent && !!game.stage;
+              const canGentleman = isCurrent && !game.stage && !isEditingRejectedFlow;
+              const gConfirm = gentlemanConfirm[game.index] || { p1: false, p2: false };
+              const isGentlemanReady = gConfirm.p1 && gConfirm.p2;
 
               return (
                 <React.Fragment key={game.index}>
@@ -555,6 +599,25 @@ export default function SetDetail() {
                       </AccordionTrigger>
                       <AccordionContent>
                         <div className="space-y-3 pt-1">
+                          <div className="flex flex-col sm:flex-row gap-2">
+                            <Button
+                              variant="outline"
+                              className="w-full sm:w-auto"
+                              disabled={!canGentleman}
+                              onClick={() => openGentleman(game.index)}
+                            >
+                              ¿Gentleman?
+                            </Button>
+                            <Button
+                              variant="outline"
+                              className="w-full sm:w-auto"
+                              disabled={bans.length === 0 && !game.stage}
+                              onClick={() => resetBansForGame(game.index)}
+                            >
+                              Reestablecer bans
+                            </Button>
+                          </div>
+
                           <StageSelector
                             bannedStages={bans}
                             pickedStage={game.stage}
@@ -599,6 +662,84 @@ export default function SetDetail() {
                       </div>
                     </AccordionContent>
                   </AccordionItem>
+
+                  {/* Gentleman modal per game */}
+                  <AlertDialog open={gentlemanGameIndex === game.index} onOpenChange={(open) => !open && closeGentleman()}>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>¿Gentleman? (Game {game.index})</AlertDialogTitle>
+                      </AlertDialogHeader>
+
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <Button
+                            variant={gConfirm.p1 ? 'default' : 'outline'}
+                            onClick={() =>
+                              setGentlemanConfirm((prev) => ({
+                                ...prev,
+                                [game.index]: { ...(prev[game.index] || { p1: false, p2: false }), p1: true },
+                              }))
+                            }
+                          >
+                            Confirmar {setDetail.p1.name}
+                          </Button>
+                          <Button
+                            variant={gConfirm.p2 ? 'default' : 'outline'}
+                            onClick={() =>
+                              setGentlemanConfirm((prev) => ({
+                                ...prev,
+                                [game.index]: { ...(prev[game.index] || { p1: false, p2: false }), p2: true },
+                              }))
+                            }
+                          >
+                            Confirmar {setDetail.p2.name}
+                          </Button>
+                        </div>
+
+                        {!isGentlemanReady ? (
+                          <p className="text-sm text-muted-foreground">
+                            Deben confirmar ambos jugadores para elegir escenario sin bans.
+                          </p>
+                        ) : (
+                          <div className="space-y-2">
+                            <p className="text-sm font-medium">Elige escenario (sin bans)</p>
+                            <StageSelector
+                              bannedStages={[]}
+                              pickedStage={game.stage}
+                              mode="pick"
+                              bansRemaining={0}
+                              busy={false}
+                              onBan={() => {}}
+                              onPick={(stage) => setGentlemanStage(game.index, stage)}
+                              currentBanner={undefined}
+                              p1Name={setDetail.p1.name}
+                              p2Name={setDetail.p2.name}
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+                        <AlertDialogCancel
+                          onClick={() => {
+                            // reset confirmations
+                            setGentlemanConfirm((prev) => ({ ...prev, [game.index]: { p1: false, p2: false } }));
+                            closeGentleman();
+                          }}
+                        >
+                          Cancelar
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => {
+                            // no-op: stage selection is done inside StageSelector
+                            closeGentleman();
+                          }}
+                        >
+                          Cerrar
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </React.Fragment>
               );
             })}

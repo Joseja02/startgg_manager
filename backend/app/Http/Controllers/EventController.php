@@ -88,6 +88,11 @@ class EventController extends Controller
                 // Quitar los nulos generados por filtrado
                 $filteredSets = array_values(array_filter($mapped));
 
+                // Guardia extra: nunca mostrar completados
+                $filteredSets = array_values(array_filter($filteredSets, function ($set) {
+                    return in_array($set['status'] ?? null, ['not_started', 'in_progress'], true);
+                }));
+
                 // Aplicar filtro por estado si corresponde
                 if ($statusFilter) {
                     $filteredSets = array_values(array_filter($filteredSets, function ($set) use ($statusFilter) {

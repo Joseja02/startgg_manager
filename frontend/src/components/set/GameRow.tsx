@@ -100,51 +100,43 @@ export function GameRow({ game, p1Name, p2Name, onChange, readonly = false, lock
           </Select>
         </div>
 
-        {/* Stocks */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label>{p1Name} - Stocks</Label>
-            <Select
-              value={stocksP1Value}
-              onValueChange={(value) =>
-                updateGame({ stocksP1: value === 'unknown' ? null : (Number(value) as 0 | 1 | 2 | 3) })
+        {/* Winner Stocks */}
+        <div className="space-y-2">
+          <Label>Stocks del ganador</Label>
+          <Select
+            value={
+              game.winner === 'p1'
+                ? stocksP1Value
+                : game.winner === 'p2'
+                  ? stocksP2Value
+                  : ''
+            }
+            onValueChange={(value) => {
+              if (!game.winner) return;
+              if (value === 'unknown') {
+                // desconocido: no enviar stocks
+                updateGame({ stocksP1: null, stocksP2: null });
+                return;
               }
-              disabled={readonly}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="-" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="unknown">Desconocido</SelectItem>
-                <SelectItem value="0">0 stocks</SelectItem>
-                <SelectItem value="1">1 stock</SelectItem>
-                <SelectItem value="2">2 stocks</SelectItem>
-                <SelectItem value="3">3 stocks</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label>{p2Name} - Stocks</Label>
-            <Select
-              value={stocksP2Value}
-              onValueChange={(value) =>
-                updateGame({ stocksP2: value === 'unknown' ? null : (Number(value) as 0 | 1 | 2 | 3) })
+              const winnerStocks = Number(value) as 1 | 2 | 3;
+              if (game.winner === 'p1') {
+                updateGame({ stocksP1: winnerStocks, stocksP2: 0 });
+              } else {
+                updateGame({ stocksP1: 0, stocksP2: winnerStocks });
               }
-              disabled={readonly}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="-" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="unknown">Desconocido</SelectItem>
-                <SelectItem value="0">0 stocks</SelectItem>
-                <SelectItem value="1">1 stock</SelectItem>
-                <SelectItem value="2">2 stocks</SelectItem>
-                <SelectItem value="3">3 stocks</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+            }}
+            disabled={readonly || !game.winner}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder={game.winner ? 'Selecciona stocks' : 'Selecciona ganador primero'} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="unknown">Desconocido</SelectItem>
+              <SelectItem value="1">1 stock</SelectItem>
+              <SelectItem value="2">2 stocks</SelectItem>
+              <SelectItem value="3">3 stocks</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Characters */}
