@@ -43,7 +43,7 @@ RUN php artisan storage:link || true
 RUN a2enmod rewrite
 
 # Crea configuración de Apache
-RUN echo '<VirtualHost *:${PORT}>\n\
+RUN echo '<VirtualHost *:__PORT__>\n\
     ServerAdmin webmaster@localhost\n\
     DocumentRoot /var/www/html/public\n\
     <Directory /var/www/html/public>\n\
@@ -58,8 +58,10 @@ RUN echo '<VirtualHost *:${PORT}>\n\
 # Script para configurar el puerto, ejecutar migraciones e iniciar Apache
 RUN echo '#!/bin/bash\n\
 set -e\n\
+PORT="${PORT:-8000}"\n\
 echo "Configurando puerto..."\n\
 sed -i "s/Listen 80/Listen $PORT/g" /etc/apache2/ports.conf\n\
+sed -i "s/__PORT__/$PORT/g" /etc/apache2/sites-available/000-default.conf\n\
 echo "Ejecutando migraciones..."\n\
 php artisan migrate --force\n\
 echo "Iniciando Apache..."\n\
