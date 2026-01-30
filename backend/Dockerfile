@@ -60,7 +60,7 @@ RUN echo '#!/bin/bash\n\
 set -e\n\
 PORT="${PORT:-8000}"\n\
 echo "Configurando puerto..."\n\
-sed -i "s/Listen 80/Listen $PORT/g" /etc/apache2/ports.conf\n\
+printf "Listen %s\n" "$PORT" > /etc/apache2/ports.conf\n\
 sed -i "s/__PORT__/$PORT/g" /etc/apache2/sites-available/000-default.conf\n\
 echo "Ejecutando migraciones..."\n\
 php artisan migrate --force\n\
