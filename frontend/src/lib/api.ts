@@ -33,7 +33,7 @@ export const authApi = {
   })),
   login: () => {
     const base = import.meta.env.VITE_API_BASE_URL;
-    window.location.href = `${base}/auth/login`;
+    window.location.href = base ? `${base}/auth/login` : '/auth/login';
   },
 };
 
