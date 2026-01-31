@@ -30,7 +30,7 @@ export function useSetData(setId: string | undefined) {
     },
     onError: (error: any) => {
       const status = error?.response?.status;
-      const message = error?.response?.data?.message || error?.response?.data?.error;
+      const message = error?.response?.data?.message || error?.response?.data?.error || 'Ha ocurrido un error';
       
       if (status === 403) {
         // Will be handled by scope error modal
@@ -39,7 +39,7 @@ export function useSetData(setId: string | undefined) {
       
       toast({
         title: 'Error al iniciar set',
-        description: message || 'Ha ocurrido un error',
+        description: message,
         variant: 'destructive',
       });
     },

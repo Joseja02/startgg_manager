@@ -228,14 +228,16 @@ class ReportController extends Controller
             ]);
             
         } catch (\Throwable $e) {
+            $errorMessage = $e->getMessage();
+            
             Log::error('Error approving report', [
                 'report_id' => $reportId,
-                'error' => $e->getMessage(),
+                'error' => $errorMessage,
             ]);
             
             return response()->json([
                 'error' => 'Failed to approve report',
-                'message' => $e->getMessage(),
+                'message' => $errorMessage,
             ], 500);
         }
     }

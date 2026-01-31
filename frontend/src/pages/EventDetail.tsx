@@ -5,8 +5,11 @@ import { AppLayout } from '@/components/layouts/AppLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 import { competitorApi } from '@/lib/api';
-import { ArrowLeft, Trophy, Eye, Play, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Trophy, Eye, Play, RefreshCw, Loader2 } from 'lucide-react';
 import type { SetSummary } from '@/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
@@ -20,6 +23,8 @@ export default function EventDetail() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [pendingStartSetId, setPendingStartSetId] = useState<SetSummary['id'] | null>(null);
+  const [forceBestOf, setForceBestOf] = useState(false);
+  const [forcedBestOfValue, setForcedBestOfValue] = useState<3 | 5>(3);
 
   const { data: event, isLoading: eventLoading } = useQuery({
     queryKey: ['event', eventId],
@@ -72,18 +77,31 @@ export default function EventDetail() {
       }
       setPendingStartSetId(null);
     },
-    onError: () => {
+    onError: (error: any) => {
+      const message = error?.response?.data?.message || error?.response?.data?.error || 'No se pudo iniciar el set';
       toast({
-        title: 'Error',
-        description: 'No se pudo iniciar el set',
+        title: 'Error al iniciar set',
+        description: message,
         variant: 'destructive',
       });
+      setPendingStartSetId(null);
     },
   });
 
   const handleConfirmStart = (bestOf: 3 | 5) => {
     if (!pendingStartSetId) return;
-    startSetMutation.mutate({ setId: pendingStartSetId, bestOf });
+    // Si el toggle está activo, usar el valor forzado
+    const finalBestOf = forceBestOf ? forcedBestOfValue : bestOf;
+    startSetMutation.mutate({ setId: pendingStartSetId, bestOf: finalBestOf });
+  };
+
+  const handleStartSetClick = (setId: SetSummary['id']) => {
+    // Si el toggle está activo, iniciar directamente con el valor forzado
+    if (forceBestOf) {
+      startSetMutation.mutate({ setId, bestOf: forcedBestOfValue });
+    } else {
+      setPendingStartSetId(setId);
+    }
   };
 
   if (eventLoading) {
@@ -161,6 +179,39 @@ export default function EventDetail() {
             </Button>
           </div>
 
+          {/* Toggle para forzar Best Of (solo para admins) */}
+          {event.isAdmin && (
+            <Card className="border-dashed">
+              <CardContent className="pt-6">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <Switch
+                      id="force-bestof"
+                      checked={forceBestOf}
+                      onCheckedChange={setForceBestOf}
+                    />
+                    <Label htmlFor="force-bestof" className="text-sm font-medium cursor-pointer">
+                      Forzar "Best of" a:
+                    </Label>
+                  </div>
+                  <Select
+                    value={String(forcedBestOfValue)}
+                    onValueChange={(value) => setForcedBestOfValue(value === '5' ? 5 : 3)}
+                    disabled={!forceBestOf}
+                  >
+                    <SelectTrigger className="w-[120px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="3">BO3</SelectItem>
+                      <SelectItem value="5">BO5</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {setsLoading ? (
             <div className="space-y-3">
               <Skeleton className="h-28" />
@@ -208,12 +259,21 @@ export default function EventDetail() {
                         <div className="space-y-2">
                           {set.status === 'not_started' && (
                             <Button
-                              onClick={() => setPendingStartSetId(set.id)}
+                              onClick={() => handleStartSetClick(set.id)}
                               disabled={startSetMutation.isPending}
                               className="w-full gap-2"
                             >
-                              <Play className="w-4 h-4" />
-                              Iniciar Set
+                              {startSetMutation.isPending && pendingStartSetId === set.id ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                  Iniciando...
+                                </>
+                              ) : (
+                                <>
+                                  <Play className="w-4 h-4" />
+                                  Iniciar Set
+                                </>
+                              )}
                             </Button>
                           )}
                           {set.status === 'in_progress' && !canEditRejected && (
@@ -271,7 +331,7 @@ export default function EventDetail() {
         </section>
       </div>
       <BestOfDialog
-        open={pendingStartSetId !== null}
+        open={pendingStartSetId !== null && !forceBestOf}
         onClose={() => setPendingStartSetId(null)}
         onConfirm={handleConfirmStart}
         isSubmitting={startSetMutation.isPending}

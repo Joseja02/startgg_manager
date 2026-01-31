@@ -11,7 +11,7 @@ import { LocalRps } from '@/components/set/LocalRps';
 import { competitorApi } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { GameRecord, calculateScore, StageName } from '@/types';
-import { ArrowLeft, Send, Users, Save, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Send, Users, Save, CheckCircle2, Loader2 } from 'lucide-react';
 import { useDebounce } from '@/hooks/useDebounce';
 import { toast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -150,10 +150,11 @@ export default function SetDetail() {
       queryClient.invalidateQueries({ queryKey: ['setDetail', setId] });
       setTimeout(() => navigate('/dashboard'), 1500);
     },
-    onError: () => {
+    onError: (error: any) => {
+      const message = error?.response?.data?.message || error?.response?.data?.error || 'No se pudo enviar el reporte';
       toast({
         title: 'Error al enviar reporte',
-        description: 'No se pudo enviar el reporte',
+        description: message,
         variant: 'destructive',
       });
     },
@@ -763,8 +764,17 @@ export default function SetDetail() {
             className="w-full bg-gradient-primary py-6 text-lg"
             size="lg"
           >
-            <Send className="mr-2 h-5 w-5" />
-            {submitMutation.isPending ? 'Enviando...' : 'Enviar Reporte para Revisión'}
+            {submitMutation.isPending ? (
+              <>
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                Enviando...
+              </>
+            ) : (
+              <>
+                <Send className="mr-2 h-5 w-5" />
+                Enviar Reporte para Revisión
+              </>
+            )}
           </Button>
         </>
       ) : (

@@ -150,7 +150,7 @@ class SetController extends Controller
             ]);
 
         } catch (\RuntimeException $e) {
-            // Errores esperados desde StartggClient (p.ej. scopes faltantes)
+            // Errores esperados desde StartggClient (mensajes originales de Start.gg)
             $msg = $e->getMessage();
 
             Log::warning('Runtime error starting set', [

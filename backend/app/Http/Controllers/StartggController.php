@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cookie;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
@@ -52,28 +53,34 @@ class StartggController extends Controller
 
     public function callback(Request $request)
     {
+        $frontendUrl = $this->getFrontendUrl();
+        
         // Try to get state from session first (primary), then fallback to cookie (redundant for diagnosis)
-        $stateFromSession = $request->session()->pull('oauth_state');
+        // Use get() instead of pull() to avoid removing it on first check
+        $stateFromSession = $request->session()->get('oauth_state');
         $stateFromCookie = $request->cookie('oauth_state_cookie');
         $state = $stateFromSession ?? $stateFromCookie;
         
-        $frontendUrl = $this->getFrontendUrl();
+        $receivedState = $request->query('state');
+        $code = $request->query('code');
 
         Log::info('oauth callback received', [
             'state_from_session_exists' => (bool) $stateFromSession,
             'state_from_cookie_exists' => (bool) $stateFromCookie,
-            'received_state' => $request->query('state'),
+            'received_state' => $receivedState,
             'session_id' => $request->session()->getId(),
             'session_cookie' => $request->cookie(config('session.cookie')),
+            'has_code' => (bool) $code,
         ]);
 
-        if (!$state || $state !== $request->query('state')) {
+        // Validate state first
+        if (!$state || $state !== $receivedState) {
             // Log useful debugging info without exposing sensitive tokens
             Log::warning('oauth callback state mismatch', [
                 'expected_state_exists' => (bool) $state,
                 'expected_state_from_session' => (bool) $stateFromSession,
                 'expected_state_from_cookie' => (bool) $stateFromCookie,
-                'received_state' => $request->query('state'),
+                'received_state' => $receivedState,
                 'session_id' => $request->session()->getId(),
                 'session_cookie' => $request->cookie(config('session.cookie')),
             ]);
@@ -82,7 +89,6 @@ class StartggController extends Controller
             return redirect()->away(rtrim($frontendUrl, '/') . '/oauth/callback?error=invalid_state');
         }
 
-        $code = $request->query('code');
         if (!$code) {
             Log::warning('oauth callback missing code', [
                 'session_id' => $request->session()->getId(),
@@ -92,6 +98,25 @@ class StartggController extends Controller
 
             return redirect()->away(rtrim($frontendUrl, '/') . '/oauth/callback?error=missing_code');
         }
+
+        // Prevent duplicate code usage: check if this code was already processed
+        $codeCacheKey = 'oauth_code_used_' . hash('sha256', $code);
+        if (Cache::has($codeCacheKey)) {
+            Log::warning('oauth callback duplicate code usage', [
+                'code_hash' => substr(hash('sha256', $code), 0, 8),
+                'session_id' => $request->session()->getId(),
+            ]);
+            
+            // If code was already used successfully, redirect to frontend with a message
+            // Otherwise, it's a retry after failure - redirect with error
+            return redirect()->away(rtrim($frontendUrl, '/') . '/oauth/callback?error=code_already_used');
+        }
+
+        // Mark code as being processed (expires in 5 minutes to prevent memory leaks)
+        Cache::put($codeCacheKey, true, 300);
+
+        // Remove state from session now that we've validated it
+        $request->session()->forget('oauth_state');
 
         // Intercambiar authorization code por access token
         // Documentación: https://developer.start.gg/docs/oauth/oauth-overview
@@ -106,10 +131,21 @@ class StartggController extends Controller
         ]);
 
         if ($tokenResponse->failed()) {
+            $errorBody = $tokenResponse->body();
+            $isRevokedCode = str_contains($errorBody, 'revoked') || str_contains($errorBody, 'invalid');
+            
             Log::error('startgg token error', [
                 'status' => $tokenResponse->status(),
-                'body' => $tokenResponse->body(),
+                'body' => $errorBody,
+                'is_revoked_code' => $isRevokedCode,
             ]);
+            
+            // If code was revoked/already used, don't remove from cache (keep it marked as used)
+            // Otherwise, remove from cache so it can be retried (though unlikely to succeed)
+            if (!$isRevokedCode) {
+                Cache::forget($codeCacheKey);
+            }
+            
             return redirect()->away(rtrim($frontendUrl, '/') . '/oauth/callback?error=token_exchange_failed');
         }
 

@@ -45,4 +45,50 @@ class StartggAuth
     {
         return $user->token_expires_at && now()->greaterThanOrEqualTo($user->token_expires_at);
     }
+
+    /**
+     * Verifica si el token está cerca de expirar (dentro de los próximos minutos)
+     * Útil para refrescar proactivamente antes de que expire
+     */
+    public function isExpiringSoon(User $user, int $minutesBeforeExpiry = 5): bool
+    {
+        if (!$user->token_expires_at) {
+            // Si no hay fecha de expiración, asumimos que está expirado o cerca de expirar
+            return true;
+        }
+
+        // Refrescar si el token expira en los próximos N minutos
+        $threshold = now()->addMinutes($minutesBeforeExpiry);
+        return $user->token_expires_at->lessThanOrEqualTo($threshold);
+    }
+
+    /**
+     * Obtiene un token válido, refrescándolo si es necesario
+     * Refresca proactivamente si está cerca de expirar
+     */
+    public function getValidToken(User $user, int $refreshBeforeMinutes = 5): ?string
+    {
+        // Si el token está expirado o cerca de expirar, refrescarlo
+        if ($this->isExpired($user) || $this->isExpiringSoon($user, $refreshBeforeMinutes)) {
+            $refreshed = $this->refresh($user);
+            if ($refreshed) {
+                Log::info('startgg token refreshed proactively', [
+                    'user_id' => $user->id,
+                    'expires_at' => $user->token_expires_at?->toIso8601String(),
+                ]);
+                return $refreshed;
+            }
+            
+            // Si el refresh falla y el token está expirado, retornar null
+            if ($this->isExpired($user)) {
+                Log::warning('startgg token expired and refresh failed', [
+                    'user_id' => $user->id,
+                    'expires_at' => $user->token_expires_at?->toIso8601String(),
+                ]);
+                return null;
+            }
+        }
+
+        return $user->startgg_access_token;
+    }
 }

@@ -7,6 +7,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Loader2 } from 'lucide-react';
 
 interface BestOfDialogProps {
   open: boolean;
@@ -30,16 +31,24 @@ export function BestOfDialog({ open, onClose, onConfirm, isSubmitting = false }:
           <Button
             onClick={() => onConfirm(3)}
             disabled={isSubmitting}
-            className="bg-gradient-primary"
+            className="bg-gradient-primary sm:w-auto w-full sm:aspect-auto aspect-square sm:min-h-[auto] min-h-[60px] sm:px-4 px-0 sm:rounded-md rounded-lg"
           >
-            Bo3
+            {isSubmitting ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              'Bo3'
+            )}
           </Button>
           <Button
             onClick={() => onConfirm(5)}
             disabled={isSubmitting}
-            className="bg-gradient-primary"
+            className="bg-gradient-primary sm:w-auto w-full sm:aspect-auto aspect-square sm:min-h-[auto] min-h-[60px] sm:px-4 px-0 sm:rounded-md rounded-lg"
           >
-            Bo5
+            {isSubmitting ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              'Bo5'
+            )}
           </Button>
         </div>
 

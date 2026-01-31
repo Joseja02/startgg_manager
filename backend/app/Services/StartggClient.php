@@ -14,7 +14,17 @@ class StartggClient
 
     public function query(User $user, string $query, array $variables = []): array
     {
-        $token = $user->startgg_access_token;
+        // Obtener un token válido, refrescándolo proactivamente si está cerca de expirar
+        // Esto evita que el usuario tenga que autenticarse frecuentemente
+        $token = $this->auth->getValidToken($user, 5); // Refrescar 5 minutos antes de expirar
+        
+        if (!$token) {
+            Log::error('startgg no valid token available', [
+                'user_id' => $user->id,
+                'has_refresh_token' => !empty($user->startgg_refresh_token),
+            ]);
+            throw new RuntimeException('No valid access token available. Please re-authenticate.');
+        }
 
         $doRequest = function ($token) use ($query, $variables) {
             return Http::withToken($token)
@@ -27,19 +37,55 @@ class StartggClient
 
         $resp = $doRequest($token);
 
+        // Si aún así recibimos un 401, intentar refrescar una vez más (fallback)
         if ($resp->status() === 401) {
+            Log::warning('startgg received 401 after proactive refresh, attempting emergency refresh', [
+                'user_id' => $user->id,
+            ]);
             $token = $this->auth->refresh($user) ?? $token;
             $resp = $doRequest($token);
         }
 
         if ($resp->failed()) {
-            Log::error('startgg graphql error', ['status' => $resp->status(), 'body' => $resp->body()]);
-            throw new RuntimeException('Failed to call start.gg');
+            $json = $resp->json();
+            $errorMessage = 'Failed to call start.gg';
+            
+            // Extraer mensaje de error original de Start.gg
+            if (!empty($json['errors']) && is_array($json['errors'])) {
+                $firstError = $json['errors'][0] ?? null;
+                if ($firstError && isset($firstError['message'])) {
+                    $errorMessage = $firstError['message'];
+                }
+            } elseif (!empty($json['error'])) {
+                $errorMessage = is_string($json['error']) ? $json['error'] : json_encode($json['error']);
+            } elseif (!empty($json['message'])) {
+                $errorMessage = $json['message'];
+            } else {
+                // Intentar extraer del body si no hay JSON válido
+                $body = $resp->body();
+                if (!empty($body)) {
+                    $errorMessage = $body;
+                }
+            }
+            
+            Log::error('startgg graphql error', [
+                'status' => $resp->status(), 
+                'body' => $resp->body(),
+                'error_message' => $errorMessage,
+            ]);
+            
+            throw new RuntimeException($errorMessage);
         }
 
         $json = $resp->json();
         if (!empty($json['errors'])) {
-          Log::warning('startgg graphql errors', $json['errors']);
+          Log::warning('startgg graphql errors', ['errors' => $json['errors']]);
+          
+          // Lanzar excepción con el primer error original de Start.gg
+          $firstError = $json['errors'][0] ?? null;
+          if ($firstError && isset($firstError['message'])) {
+              throw new RuntimeException($firstError['message']);
+          }
         }
 
         if (empty($json['data'])) {
@@ -129,7 +175,16 @@ class StartggClient
        */
       public function debugQuery(User $user, string $query, array $variables = []): array
       {
-        $token = $user->startgg_access_token;
+        // Usar getValidToken para asegurar que el token esté válido antes de hacer la petición
+        $token = $this->auth->getValidToken($user, 5);
+        
+        if (!$token) {
+          return [
+            'status' => 401,
+            'body' => json_encode(['error' => 'No valid token available']),
+            'json' => ['error' => 'No valid token available'],
+          ];
+        }
 
         $resp = Http::withToken($token)
           ->acceptJson()
@@ -630,7 +685,10 @@ class StartggClient
         if (!empty($raw['json']) && !empty($raw['json']['errors'])) {
           $err = $raw['json']['errors'][0] ?? null;
           $errMsg = $err['message'] ?? json_encode($raw['json']['errors']);
-          Log::warning('startgg markSetInProgress errors', ['set_id' => $setId, 'errors' => $raw['json']['errors']]);
+          Log::warning('startgg markSetInProgress errors', [
+              'set_id' => $setId, 
+              'errors' => $raw['json']['errors'],
+          ]);
         } else {
           Log::warning('startgg markSetInProgress empty result', ['set_id' => $setId, 'raw' => $raw]);
         }
@@ -842,13 +900,44 @@ class StartggClient
         }
       }
 
-        $data = $this->query($user, $mutation, [
-            'setId' => $setId,
-            'winnerId' => $winnerId,
-            'gameData' => $gameData,
-        ]);
+        try {
+            $data = $this->query($user, $mutation, [
+                'setId' => $setId,
+                'winnerId' => $winnerId,
+                'gameData' => $gameData,
+            ]);
 
-        return $data;
+            $result = data_get($data, 'reportBracketSet');
+            
+            if (empty($result)) {
+                // Si no hay resultado, intentar obtener errores
+                $raw = $this->debugQuery($user, $mutation, [
+                    'setId' => $setId,
+                    'winnerId' => $winnerId,
+                    'gameData' => $gameData,
+                ]);
+                
+                $errMsg = 'Unknown error';
+                if (!empty($raw['json']) && !empty($raw['json']['errors'])) {
+                    $err = $raw['json']['errors'][0] ?? null;
+                    $errMsg = $err['message'] ?? json_encode($raw['json']['errors']);
+                    Log::warning('startgg reportBracketSet errors', [
+                        'set_id' => $setId,
+                        'errors' => $raw['json']['errors'],
+                    ]);
+                }
+                
+                throw new RuntimeException('Failed to report set: ' . $errMsg);
+            }
+
+            return is_array($result) ? $result : (array) $result;
+        } catch (RuntimeException $e) {
+            // Re-lanzar con el mensaje original
+            throw $e;
+        } catch (\Throwable $e) {
+            // Mantener el mensaje original
+            throw new RuntimeException($e->getMessage(), 0, $e);
+        }
     }
 }
 
